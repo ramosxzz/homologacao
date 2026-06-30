@@ -280,16 +280,49 @@ export async function gerarDiagramaUnifilarRGE(data: ProjetoData): Promise<Uint8
 export function drawDiagramaUnifilarRGE(doc: PDFDocument, font: PDFFont, data: ProjetoData) {
   const page = doc.getPage(0);
 
-  // Bloco de título (rótulos vetorizados; posições lidas da grade pdf-lib).
-  // Rótulos: "Cliente:" baseline ~740 / "Localização:" ~725 / "Responsável técnico:" ~712
+  // Cabeçalho
   text(page, data.cliente.nome, 136, 739, font, 9);
   text(page, `${data.endereco.logradouro}, ${data.endereco.numero} — ${data.endereco.cidade}/${data.endereco.uf}`, 153, 724.5, font, 8.5);
-
   const respTec = [data.engenheiro, data.crea].filter(Boolean).join(' — CREA: ');
   text(page, respTec, 184, 711, font, 9);
 
-  // Rodapé: 3 linhas de assinatura. Local na primeira underline (cx ~90),
-  // data na segunda (cx ~210). Sem sobreposição com "NOVA SANTA RITA".
+  // Bloco "Dados Técnicos" no canto inferior-esquerdo (área livre do template)
+  const potCA = (data.sistemaFV.inversorPotencia * (parseInt(data.sistemaFV.quantidadeInversores) || 1)).toFixed(2);
+  const potPico = data.sistemaFV.potenciaInstalada.toFixed(2);
+  const qtdMod = data.sistemaFV.quantidadeModulos || '0';
+  const qtdInv = data.sistemaFV.quantidadeInversores || '1';
+  const modDesc = [data.sistemaFV.moduloFabricante, data.sistemaFV.moduloModelo].filter(Boolean).join(' ');
+  const invDesc = [data.sistemaFV.inversorFabricante, data.sistemaFV.inversorModelo].filter(Boolean).join(' ');
+  const tensao = data.unidadeConsumidora.tensaoAtendimento || '';
+  const fases = faseLabel[data.unidadeConsumidora.tipoConexao] || '';
+  const disjuntor = data.sistemaFV.disjuntorGeracao || '32 A';
+
+  // Bloco compacto entre GERADOR e Assinaturas (Y ~110-195)
+  const bx = 50, by = 108, bw = 495, bh = 85;
+  page.drawRectangle({ x: bx, y: by, width: bw, height: bh, borderColor: rgb(0,0,0), borderWidth: 0.8, color: rgb(1,1,1) });
+  text(page, 'DADOS TÉCNICOS DO PROJETO', bx + 8, by + bh - 11, font, 8.5);
+
+  const lines: Array<[string, string]> = [
+    ['Tensão / Fases:', `${tensao} · ${fases}`],
+    ['Pot. CC:', `${potPico} kWp`],
+    ['Módulos:', `${qtdMod}× ${modDesc} (${data.sistemaFV.moduloPotencia} Wp)`],
+    ['Pot. CA:', `${potCA} kW`],
+    ['Inversor:', `${qtdInv}× ${invDesc}`],
+    ['Disjuntor:', disjuntor],
+    ['DPS CC / CA:', `${data.sistemaFV.dpsCC || '1000 V'} / ${data.sistemaFV.dpsCA || '275 V'}`],
+    ['Local / Data:', `${data.endereco.cidade}/${data.endereco.uf} · ${today()}`],
+  ];
+  const colW = bw / 2;
+  lines.forEach((row, i) => {
+    const col = i % 2;
+    const rowIdx = Math.floor(i / 2);
+    const x = bx + 8 + col * colW;
+    const y = by + bh - 26 - rowIdx * 13;
+    text(page, row[0], x, y, font, 7.5);
+    text(page, row[1], x + 75, y, font, 7.5);
+  });
+
+  // Rodapé: Local cx=90, Data cx=210
   text(page, data.endereco.cidade, 90, 60, font, 8, 'center');
   text(page, today(), 210, 60, font, 8, 'center');
 }
