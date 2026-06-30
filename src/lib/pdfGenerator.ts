@@ -286,7 +286,8 @@ export function drawDiagramaUnifilarRGE(doc: PDFDocument, font: PDFFont, data: P
   const respTec = [data.engenheiro, data.crea].filter(Boolean).join(' — CREA: ');
   text(page, respTec, 184, 711, font, 9);
 
-  // Bloco "Dados Técnicos" no canto inferior-esquerdo (área livre do template)
+  // Dados técnicos posicionados ao lado de cada bloco do diagrama (raster).
+  // Coords PDF (origem bottom-left, A4 = 595×842).
   const potCA = (data.sistemaFV.inversorPotencia * (parseInt(data.sistemaFV.quantidadeInversores) || 1)).toFixed(2);
   const potPico = data.sistemaFV.potenciaInstalada.toFixed(2);
   const qtdMod = data.sistemaFV.quantidadeModulos || '0';
@@ -297,30 +298,46 @@ export function drawDiagramaUnifilarRGE(doc: PDFDocument, font: PDFFont, data: P
   const fases = faseLabel[data.unidadeConsumidora.tipoConexao] || '';
   const disjuntor = data.sistemaFV.disjuntorGeracao || '32 A';
 
-  // Bloco compacto entre GERADOR e Assinaturas (Y ~110-195)
-  const bx = 50, by = 108, bw = 495, bh = 85;
-  page.drawRectangle({ x: bx, y: by, width: bw, height: bh, borderColor: rgb(0,0,0), borderWidth: 0.8, color: rgb(1,1,1) });
-  text(page, 'DADOS TÉCNICOS DO PROJETO', bx + 8, by + bh - 11, font, 8.5);
+  // UC + tensão na área "Unidade Consumidora (Acessante)" — abaixo da seta
+  text(page, `UC: ${data.unidadeConsumidora.codigo}`, 460, 610, font, 7.5);
+  text(page, `${tensao} · ${fases}`, 460, 598, font, 7.5);
 
-  const lines: Array<[string, string]> = [
-    ['Tensão / Fases:', `${tensao} · ${fases}`],
-    ['Pot. CC:', `${potPico} kWp`],
-    ['Módulos:', `${qtdMod}× ${modDesc} (${data.sistemaFV.moduloPotencia} Wp)`],
-    ['Pot. CA:', `${potCA} kW`],
-    ['Inversor:', `${qtdInv}× ${invDesc}`],
-    ['Disjuntor:', disjuntor],
-    ['DPS CC / CA:', `${data.sistemaFV.dpsCC || '1000 V'} / ${data.sistemaFV.dpsCA || '275 V'}`],
-    ['Local / Data:', `${data.endereco.cidade}/${data.endereco.uf} · ${today()}`],
-  ];
-  const colW = bw / 2;
-  lines.forEach((row, i) => {
-    const col = i % 2;
-    const rowIdx = Math.floor(i / 2);
-    const x = bx + 8 + col * colW;
-    const y = by + bh - 26 - rowIdx * 13;
-    text(page, row[0], x, y, font, 7.5);
-    text(page, row[1], x + 75, y, font, 7.5);
-  });
+  // Disjuntor de entrada (dentro da Caixa de Medição, ao lado do label DISJUNTOR)
+  text(page, `${disjuntor}`, 460, 488, font, 8);
+  text(page, '(entrada)', 460, 478, font, 6.5);
+
+  // Carga instalada — ao lado do label CARGAS (lado direito do braço)
+  if (data.unidadeConsumidora.cargaInstalada) {
+    text(page, `Carga: ${data.unidadeConsumidora.cargaInstalada} kW`, 480, 405, font, 7.5);
+  }
+
+  // Disjuntor de geração — ao lado do segundo DISJUNTOR
+  text(page, `${disjuntor}`, 460, 375, font, 8);
+  text(page, '(geração CA)', 460, 365, font, 6.5);
+
+  // DPS CA — ao lado do disjuntor de geração
+  text(page, `DPS CA: ${data.sistemaFV.dpsCA || '275 V'}`, 360, 350, font, 6.5);
+
+  // INVERSOR — ao lado direito do bloco INVERSOR (recuado para não cortar)
+  text(page, `${qtdInv}× ${invDesc}`, 430, 320, font, 7);
+  text(page, `${potCA} kW CA`, 430, 310, font, 7);
+
+  // DPS CC + cabos CC — entre INVERSOR e GERADOR (lado esquerdo)
+  text(page, `DPS CC: ${data.sistemaFV.dpsCC || '1000 V'}`, 90, 280, font, 6.5);
+  text(page, 'Cabos CC: 6 mm² · 1000 V', 90, 270, font, 6.5);
+
+  // GERADOR — ao lado do círculo G (módulos + potência pico)
+  text(page, `${qtdMod}× ${modDesc}`, 360, 235, font, 7.5);
+  text(page, `${data.sistemaFV.moduloPotencia} Wp/módulo · ${potPico} kWp total`, 360, 224, font, 7);
+
+  // Strings — abaixo do gerador
+  const strings = data.sistemaFV.strings || [];
+  if (strings.length) {
+    const stringDesc = strings
+      .map((s, i) => `S${i + 1}: ${s.modulosEmSerie}×série / ${s.stringsParalelo}p`)
+      .join('  ');
+    text(page, stringDesc, 360, 213, font, 6.5);
+  }
 
   // Rodapé: Local cx=90, Data cx=210
   text(page, data.endereco.cidade, 90, 60, font, 8, 'center');
