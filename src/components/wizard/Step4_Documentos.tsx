@@ -11,9 +11,10 @@ import {
   gerarAnexoFRGE,
   gerarDiagramaUnifilarRGE,
   gerarDiagramaBlocosCEEE,
+  gerarMemorialCEEE,
   downloadAnexoICEEE,
   downloadPdf,
-} from '@/lib/pdfGenerator';
+} from '@/lib/pdfRenderer';
 import { openDocumentForPrint } from '@/lib/docPrint';
 import {
   FileText,
@@ -30,8 +31,8 @@ import {
   Info,
 } from 'lucide-react';
 
-type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_anexo_i';
-type PrintableDocId = Exclude<DocId, 'ceee_anexo_i'>;
+type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_memorial' | 'ceee_anexo_i';
+type PrintableDocId = Exclude<DocId, 'ceee_anexo_i' | 'ceee_memorial'>;
 
 interface DocItem {
   id: DocId;
@@ -99,6 +100,14 @@ export default function Step4_Documentos() {
       previewPath: '/documentos/ceee/diagrama-blocos.pdf',
     },
     {
+      id: 'ceee_memorial',
+      title: 'Memorial Descritivo',
+      desc: 'CEEE Equatorial · NT.00020.EQTL — Memorial técnico do sistema',
+      badge: 'Memorial',
+      tipo: 'pdf',
+      previewPath: '/documentos/ceee/memorial-descritivo.pdf',
+    },
+    {
       id: 'ceee_anexo_i',
       title: 'Formulário de Solicitação de Orçamento — Grupo B',
       desc: 'Anexo I — CEEE NT.00020.EQTL-06 · Formulário em planilha Excel',
@@ -126,10 +135,11 @@ export default function Step4_Documentos() {
   const generatePdf = async (docId: DocId): Promise<Uint8Array> => {
     const p = buildPayload();
     switch (docId) {
-      case 'rge_anexo_e':  return gerarAnexoERGE(p);
-      case 'rge_anexo_f':  return gerarAnexoFRGE(p);
-      case 'rge_diagrama': return gerarDiagramaUnifilarRGE(p);
+      case 'rge_anexo_e':   return gerarAnexoERGE(p);
+      case 'rge_anexo_f':   return gerarAnexoFRGE(p);
+      case 'rge_diagrama':  return gerarDiagramaUnifilarRGE(p);
       case 'ceee_diagrama': return gerarDiagramaBlocosCEEE(p);
+      case 'ceee_memorial': return gerarMemorialCEEE(p);
       default: throw new Error('Documento sem gerador PDF');
     }
   };
@@ -141,6 +151,7 @@ export default function Step4_Documentos() {
       case 'rge_anexo_f':   return `Anexo_F_RGE_${nc}.pdf`;
       case 'rge_diagrama':  return `Diagrama_Unifilar_RGE_${nc}.pdf`;
       case 'ceee_diagrama': return `Diagrama_Blocos_CEEE_${nc}.pdf`;
+      case 'ceee_memorial': return `Memorial_Descritivo_CEEE_${nc}.pdf`;
       default:              return 'documento.pdf';
     }
   };
