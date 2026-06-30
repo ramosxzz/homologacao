@@ -1,10 +1,37 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useProjeto } from '@/contexts/ProjetoContext';
 import dynamic from 'next/dynamic';
 import { Navigation, Loader2 } from 'lucide-react';
 import { formatarCEP } from '@/lib/validators';
+
+const GOOGLE_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '';
+
+let googleLoaderPromise: Promise<typeof google> | null = null;
+function loadGoogle(): Promise<typeof google> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('SSR'));
+  if (window.google?.maps?.places) return Promise.resolve(window.google);
+  if (googleLoaderPromise) return googleLoaderPromise;
+  googleLoaderPromise = new Promise((resolve, reject) => {
+    if (!GOOGLE_KEY) return reject(new Error('Google key ausente'));
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-maps]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.google));
+      existing.addEventListener('error', () => reject(new Error('Falha google maps')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_KEY}&libraries=places,geocoding&v=weekly&language=pt-BR&region=BR`;
+    s.async = true;
+    s.defer = true;
+    s.dataset.googleMaps = 'true';
+    s.onload = () => resolve(window.google);
+    s.onerror = () => reject(new Error('Falha google maps'));
+    document.head.appendChild(s);
+  });
+  return googleLoaderPromise;
+}
 
 // Dynamically import the leaflet map component (turns off SSR)
 const MapComponent = dynamic(() => import('../map/MapComponent'), {
@@ -22,8 +49,63 @@ export default function Step2_Endereco() {
   const [cepLoading, setCepLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const logradouroRef = useRef<HTMLInputElement | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const { endereco, localizacao } = state;
+
+  useEffect(() => {
+    if (!logradouroRef.current) return;
+    let cancelled = false;
+    loadGoogle()
+      .then((g) => {
+        if (cancelled || !logradouroRef.current || autocompleteRef.current) return;
+        const ac = new g.maps.places.Autocomplete(logradouroRef.current, {
+          componentRestrictions: { country: 'br' },
+          fields: ['address_components', 'geometry', 'formatted_address'],
+          types: ['address'],
+        });
+        ac.addListener('place_changed', () => {
+          const place = ac.getPlace();
+          if (!place.address_components) return;
+          const get = (type: string) =>
+            place.address_components?.find((c) => c.types.includes(type))?.long_name || '';
+          const route = get('route');
+          const streetNumber = get('street_number');
+          const sublocality = get('sublocality') || get('sublocality_level_1') || get('political');
+          const city = get('administrative_area_level_2') || get('locality');
+          const ufLong = place.address_components.find((c) =>
+            c.types.includes('administrative_area_level_1')
+          );
+          const uf = ufLong?.short_name || '';
+          const postal = get('postal_code');
+
+          dispatch({
+            type: 'UPDATE_ENDERECO',
+            payload: {
+              logradouro: route || place.formatted_address?.split(',')[0] || '',
+              ...(streetNumber ? { numero: streetNumber } : {}),
+              ...(sublocality ? { bairro: sublocality } : {}),
+              ...(city ? { cidade: city } : {}),
+              ...(uf ? { uf } : {}),
+              ...(postal ? { cep: postal } : {}),
+            },
+          });
+
+          if (place.geometry?.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            dispatch({ type: 'UPDATE_LOCALIZACAO', payload: { latitude: lat, longitude: lng } });
+          }
+        });
+        autocompleteRef.current = ac;
+      })
+      .catch((e) => console.warn('Places autocomplete:', e));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEnderecoChange = (field: string, value: string) => {
     dispatch({
@@ -199,8 +281,9 @@ export default function Step2_Endereco() {
           <div className="form-group full-width">
             <label className="form-label required">Logradouro / Avenida</label>
             <input
+              ref={logradouroRef}
               type="text"
-              placeholder="Rua, Avenida, Travessa..."
+              placeholder="Digite para buscar (autocomplete Google)"
               className="form-input"
               value={endereco.logradouro}
               onChange={(e) => handleEnderecoChange('logradouro', e.target.value)}
