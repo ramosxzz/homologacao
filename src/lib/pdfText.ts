@@ -8,7 +8,13 @@ type PdfJsModule = {
   GlobalWorkerOptions: {
     workerSrc: string;
   };
-  getDocument: (source: { data: Uint8Array }) => {
+  getDocument: (source: {
+    data: Uint8Array;
+    isEvalSupported?: boolean;
+    useSystemFonts?: boolean;
+    disableFontFace?: boolean;
+    verbosity?: number;
+  }) => {
     promise: Promise<{
       numPages: number;
       getPage: (pageNumber: number) => Promise<{
@@ -20,10 +26,21 @@ type PdfJsModule = {
 
 export async function extractPdfText(file: File): Promise<string> {
   const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as PdfJsModule;
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.mjs`;
+
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/legacy/build/pdf.worker.min.mjs`;
+  } catch {
+    // pdfjs falls back to in-thread fake worker if workerSrc fails
+  }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+  const pdf = await pdfjs.getDocument({
+    data: bytes,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableFontFace: true,
+    verbosity: 0,
+  }).promise;
   const pages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {

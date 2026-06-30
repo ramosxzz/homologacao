@@ -12,6 +12,7 @@ export default function Step1_DadosCliente() {
   const { state, dispatch } = useProjeto();
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrSuccess, setOcrSuccess] = useState<boolean | null>(null);
+  const [ocrError, setOcrError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { cliente, unidadeConsumidora, distribuidora } = state;
@@ -55,6 +56,7 @@ export default function Step1_DadosCliente() {
 
     setOcrLoading(true);
     setOcrSuccess(null);
+    setOcrError('');
 
     // PDF parsing runs in the browser because Cloudflare Workers cannot execute pdftotext.
     if (file.type === 'application/pdf') {
@@ -106,6 +108,7 @@ export default function Step1_DadosCliente() {
         }
       } catch (err) {
         console.error('PDF text extraction error:', err);
+        setOcrError(err instanceof Error ? err.message : 'Falha ao ler o PDF.');
         setOcrSuccess(false);
       } finally {
         setOcrLoading(false);
@@ -130,6 +133,7 @@ export default function Step1_DadosCliente() {
         setOcrSuccess(true);
       } catch (err) {
         console.error('Tesseract OCR error:', err);
+        setOcrError(err instanceof Error ? err.message : 'Falha no OCR da imagem.');
         setOcrSuccess(false);
       } finally {
         setOcrLoading(false);
@@ -224,6 +228,20 @@ export default function Step1_DadosCliente() {
               <div className="text-center">
                 <span className="file-upload-text block font-semibold text-emerald-400">Leitura Concluída com Sucesso!</span>
                 <span className="file-upload-hint text-xs text-slate-400">Dados principais preenchidos. Revise os campos antes de avançar.</span>
+              </div>
+            </div>
+          ) : ocrSuccess === false ? (
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="upload-icon-wrapper">
+                <Upload size={28} className="text-rose-400" />
+              </div>
+              <div className="text-center">
+                <span className="file-upload-text block font-semibold text-rose-400">
+                  Não foi possível ler a fatura
+                </span>
+                <span className="file-upload-hint text-xs text-slate-400">
+                  {ocrError || 'Verifique se o PDF é a fatura original (não escaneada).'} Clique para tentar outro arquivo.
+                </span>
               </div>
             </div>
           ) : (
