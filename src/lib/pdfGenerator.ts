@@ -288,9 +288,10 @@ export function drawDiagramaUnifilarRGE(doc: PDFDocument, font: PDFFont, data: P
   const respTec = [data.engenheiro, data.crea].filter(Boolean).join(' — CREA: ');
   text(page, respTec, 184, 711, font, 9);
 
-  // Rodapé: linhas de assinatura — Local (centro ~130) / Data (centro ~182)
-  text(page, data.endereco.cidade, 130, 60, font, 9, 'center');
-  text(page, today(), 182, 60, font, 9, 'center');
+  // Rodapé: 3 linhas de assinatura. Local na primeira underline (cx ~90),
+  // data na segunda (cx ~210). Sem sobreposição com "NOVA SANTA RITA".
+  text(page, data.endereco.cidade, 90, 60, font, 8, 'center');
+  text(page, today(), 210, 60, font, 8, 'center');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
