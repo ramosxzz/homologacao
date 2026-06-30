@@ -100,21 +100,20 @@ export default function Step2_Endereco() {
       : `${logradouro}, ${cidade}, ${uf}, Brasil`;
 
     try {
+      const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '';
       const url =
-        `https://nominatim.openstreetmap.org/search` +
-        `?format=json&limit=3&countrycodes=br&addressdetails=1` +
-        `&q=${encodeURIComponent(baseQuery)}`;
+        `https://maps.googleapis.com/maps/api/geocode/json` +
+        `?address=${encodeURIComponent(baseQuery)}&region=br&language=pt-BR&key=${key}`;
 
-      const response = await fetch(url, {
-        headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' },
-      });
+      const response = await fetch(url);
       const data = await response.json();
 
-      if (data && data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
+      if (data.status === 'OK' && data.results?.length > 0) {
+        const { lat, lng } = data.results[0].geometry.location;
         handleLocalizacaoChange('latitude', lat);
-        handleLocalizacaoChange('longitude', lon);
+        handleLocalizacaoChange('longitude', lng);
+      } else if (data.status && data.status !== 'OK') {
+        console.warn('Google Geocoding:', data.status, data.error_message);
       }
     } catch (e) {
       console.error('Geocoding error:', e);
