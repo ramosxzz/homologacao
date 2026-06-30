@@ -28,6 +28,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  updateEmpresaLocal: (patch: Partial<Empresa>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -379,8 +380,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   };
 
+  const updateEmpresaLocal = (patch: Partial<Empresa>) => {
+    setEmpresaData((prev) => {
+      const next = prev ? { ...prev, ...patch } : null;
+      if (!isSupabaseConfigured && typeof window !== 'undefined' && next) {
+        localStorage.setItem('solaire_sim_empresa', JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userData, empresaData, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, userData, empresaData, loading, login, register, logout, updateEmpresaLocal }}>
       {children}
     </AuthContext.Provider>
   );

@@ -144,6 +144,21 @@ export async function listProjetos(empresaId: string): Promise<Projeto[]> {
   return (data as ProjetoRow[]).map(mapProjeto);
 }
 
+export async function updateEmpresa(empresaId: string, patch: Partial<Empresa>): Promise<void> {
+  if (!supabase) return;
+  const row: Record<string, unknown> = {};
+  if (patch.nomeFantasia !== undefined) row.nome_fantasia = patch.nomeFantasia;
+  if (patch.razaoSocial !== undefined) row.razao_social = patch.razaoSocial;
+  if (patch.cnpj !== undefined) row.cnpj = patch.cnpj;
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.telefone !== undefined) row.telefone = patch.telefone;
+  if (patch.endereco !== undefined) row.endereco = patch.endereco;
+  if (patch.logo !== undefined) row.logo = patch.logo;
+  if (patch.responsavelTecnico !== undefined) row.responsavel_tecnico = patch.responsavelTecnico;
+  const { error } = await supabase.from('empresas').update(row).eq('id', empresaId);
+  if (error) throw error;
+}
+
 export async function insertProjeto(payload: ProjetoPayload): Promise<string> {
   if (!supabase) throw new Error('Supabase não configurado.');
 

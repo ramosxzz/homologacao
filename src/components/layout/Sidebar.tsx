@@ -40,26 +40,10 @@ export default function Sidebar({ userName, userEmail, onLogout }: SidebarProps)
   };
 
   const navLinks = [
-    {
-      label: 'Dashboard',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      label: 'Novo Projeto',
-      href: '/projeto/novo',
-      icon: PlusCircle,
-    },
-    {
-      label: 'Meus Projetos',
-      href: '/dashboard#projetos',
-      icon: FolderOpen,
-    },
-    {
-      label: 'Configurações',
-      href: '/configuracoes',
-      icon: Settings,
-    },
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Novo Projeto', href: '/projeto/novo', icon: PlusCircle },
+    { label: 'Meus Projetos', href: '/projetos', icon: FolderOpen },
+    { label: 'Configurações', href: '/configuracoes', icon: Settings },
   ];
 
   const handleLinkClick = (href: string) => {
@@ -113,7 +97,7 @@ export default function Sidebar({ userName, userEmail, onLogout }: SidebarProps)
           
           {navLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = pathname === link.href || (link.href.startsWith('/dashboard') && pathname === '/dashboard');
+            const isActive = pathname === link.href;
             
             return (
               <button

@@ -27,10 +27,9 @@ import {
 const statusLabels: Record<Projeto['status'], string> = {
   rascunho: 'Rascunho',
   em_andamento: 'Em andamento',
-  concluido: 'Concluido',
+  concluido: 'Concluído',
   enviado: 'Enviado',
 };
-
 const statusClassNames: Record<Projeto['status'], string> = {
   rascunho: 'badge badge-gray',
   em_andamento: 'badge badge-gold',
@@ -46,7 +45,6 @@ export default function DashboardPage() {
   useEffect(() => {
     async function fetchProjects() {
       if (!userData?.empresaId) return;
-
       if (shouldUseSupabaseData()) {
         try {
           setProjects(await listProjetos(userData.empresaId));
@@ -60,18 +58,15 @@ export default function DashboardPage() {
         loadLocalProjectsFallback();
       }
     }
-
     const loadLocalProjectsFallback = () => {
       const storedProjStr = localStorage.getItem('solaire_sim_projects');
       const projectsList: Projeto[] = storedProjStr ? JSON.parse(storedProjStr) : [];
       const filtered = projectsList
         .filter((p) => p.empresaId === userData?.empresaId)
         .sort((a, b) => new Date(b.atualizadoEm).getTime() - new Date(a.atualizadoEm).getTime());
-
       setProjects(filtered);
       setLoadingProjects(false);
     };
-
     fetchProjects();
   }, [userData]);
 
@@ -80,36 +75,28 @@ export default function DashboardPage() {
     const inProgress = projects.filter((p) => p.status === 'em_andamento' || p.status === 'rascunho').length;
     const completed = projects.filter((p) => p.status === 'concluido' || p.status === 'enviado').length;
     const thisMonth = projects.filter((p) => {
-      const createdDate = new Date(p.criadoEm);
+      const d = new Date(p.criadoEm);
       const now = new Date();
-      return createdDate.getMonth() === now.getMonth() && createdDate.getFullYear() === now.getFullYear();
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
     const pipelinePower = projects.reduce((sum, p) => sum + (p.sistemaFV?.potenciaInstalada || 0), 0);
     const ceee = projects.filter((p) => p.distribuidora === 'CEEE').length;
     const rge = projects.filter((p) => p.distribuidora === 'RGE').length;
-
     return { total, inProgress, completed, thisMonth, pipelinePower, ceee, rge };
   }, [projects]);
 
-  const recentProjects = projects.slice(0, 6);
-  const lastUpdatedProject = projects[0];
+  const recent = projects.slice(0, 5);
+  const last = projects[0];
   const companyName = empresaData?.nomeFantasia || 'Sua integradora';
 
-  const getStatusBadge = (status: Projeto['status']) => (
-    <span className={statusClassNames[status] || 'badge badge-gray'}>
-      {statusLabels[status] || status}
-    </span>
-  );
-
-  const formatDate = (dateStr: string) => {
+  const formatDate = (d: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('pt-BR');
+      return new Date(d).toLocaleDateString('pt-BR');
     } catch {
-      return dateStr;
+      return d;
     }
   };
-
-  const formatPower = (value?: number) => (value ? `${value.toFixed(2)} kWp` : 'N/A');
+  const formatPower = (v?: number) => (v ? `${v.toFixed(2)} kWp` : 'N/A');
 
   return (
     <div className="dashboard-container dashboard-premium page-enter">
@@ -118,7 +105,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <AlertCircle size={16} />
             <span>
-              <strong>Modo de simulacao local:</strong> Os projetos deste login de teste ficam apenas neste navegador.
+              <strong>Modo de simulação local:</strong> os projetos deste login de teste ficam apenas neste navegador.
             </span>
           </div>
         </div>
@@ -130,9 +117,9 @@ export default function DashboardPage() {
             <Building2 size={16} />
             {companyName}
           </div>
-          <h1 className="page-title dashboard-title">Operacao de homologacoes</h1>
+          <h1 className="page-title dashboard-title">Operação de homologações</h1>
           <p className="page-subtitle dashboard-subtitle">
-            Acompanhe projetos, dados tecnicos, mapa e documentos oficiais em um unico painel de trabalho.
+            Acompanhe projetos, dados técnicos, mapa e documentos oficiais em um único painel.
           </p>
         </div>
 
@@ -148,84 +135,71 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="ops-strip" aria-label="Resumo da operacao">
+      <section className="ops-strip" aria-label="Resumo da operação">
         <div className="ops-strip-item">
           <span className="ops-strip-label">Pipeline total</span>
           <strong>{stats.total}</strong>
           <small>{stats.inProgress} em preparo</small>
         </div>
         <div className="ops-strip-item">
-          <span className="ops-strip-label">Potencia cadastrada</span>
+          <span className="ops-strip-label">Potência cadastrada</span>
           <strong>{stats.pipelinePower.toFixed(2)} kWp</strong>
-          <small>{stats.thisMonth} novos este mes</small>
+          <small>{stats.thisMonth} novos este mês</small>
         </div>
         <div className="ops-strip-item">
           <span className="ops-strip-label">Distribuidoras</span>
-          <strong>{stats.ceee} CEEE / {stats.rge} RGE</strong>
-          <small>Modelos separados por concessionaria</small>
+          <strong>{stats.ceee} CEEE · {stats.rge} RGE</strong>
+          <small>Modelos separados por concessionária</small>
         </div>
         <div className="ops-strip-item">
-          <span className="ops-strip-label">Ultima atividade</span>
-          <strong>{lastUpdatedProject ? formatDate(lastUpdatedProject.atualizadoEm) : 'Sem projetos'}</strong>
-          <small>{lastUpdatedProject?.cliente?.nome || 'Crie um projeto para iniciar'}</small>
+          <span className="ops-strip-label">Última atividade</span>
+          <strong>{last ? formatDate(last.atualizadoEm) : 'Sem projetos'}</strong>
+          <small>{last?.cliente?.nome || 'Crie um projeto para iniciar'}</small>
         </div>
       </section>
 
       <section className="stats-grid dashboard-stat-grid">
         <div className="stat-card premium-stat-card">
-          <div className="stat-card-icon-wrapper gold">
-            <FolderOpen size={22} />
-          </div>
+          <div className="stat-card-icon-wrapper gold"><FolderOpen size={22} /></div>
           <div className="stat-card-info">
             <span className="stat-card-label">Projetos totais</span>
             <span className="stat-card-value">{stats.total}</span>
           </div>
         </div>
-
         <div className="stat-card premium-stat-card">
-          <div className="stat-card-icon-wrapper blue">
-            <Clock3 size={22} />
-          </div>
+          <div className="stat-card-icon-wrapper blue"><Clock3 size={22} /></div>
           <div className="stat-card-info">
             <span className="stat-card-label">Em andamento</span>
             <span className="stat-card-value">{stats.inProgress}</span>
           </div>
         </div>
-
         <div className="stat-card premium-stat-card">
-          <div className="stat-card-icon-wrapper green">
-            <CheckCircle2 size={22} />
-          </div>
+          <div className="stat-card-icon-wrapper green"><CheckCircle2 size={22} /></div>
           <div className="stat-card-info">
-            <span className="stat-card-label">Concluidos ou enviados</span>
+            <span className="stat-card-label">Concluídos ou enviados</span>
             <span className="stat-card-value">{stats.completed}</span>
           </div>
         </div>
-
         <div className="stat-card premium-stat-card">
-          <div className="stat-card-icon-wrapper gold">
-            <TrendingUp size={22} />
-          </div>
+          <div className="stat-card-icon-wrapper gold"><TrendingUp size={22} /></div>
           <div className="stat-card-info">
-            <span className="stat-card-label">Criados este mes</span>
+            <span className="stat-card-label">Criados este mês</span>
             <span className="stat-card-value">{stats.thisMonth}</span>
           </div>
         </div>
       </section>
 
       <section className="dashboard-workspace">
-        <div id="projetos" className="card projects-panel">
+        <div className="card projects-panel">
           <div className="card-header projects-panel-header">
             <div>
               <h2 className="card-title">Projetos recentes</h2>
               <p className="panel-muted">Continue exatamente de onde a equipe parou.</p>
             </div>
-            {stats.total > 0 && (
-              <Link href="/projeto/novo" className="btn btn-secondary btn-sm flex items-center gap-1">
-                <PlusCircle size={15} />
-                Adicionar
-              </Link>
-            )}
+            <Link href="/projetos" className="btn btn-secondary btn-sm flex items-center gap-1">
+              Ver todos
+              <ArrowRight size={14} />
+            </Link>
           </div>
 
           {loadingProjects ? (
@@ -235,12 +209,10 @@ export default function DashboardPage() {
             </div>
           ) : stats.total === 0 ? (
             <div className="empty-state empty-state-premium">
-              <div className="empty-state-icon-container">
-                <FolderOpen size={34} />
-              </div>
+              <div className="empty-state-icon-container"><FolderOpen size={34} /></div>
               <h3 className="empty-state-title">Nenhum projeto cadastrado</h3>
               <p className="empty-state-text">
-                Crie o primeiro projeto para gerar anexos, memorial, diagramas e organizar a homologacao.
+                Crie o primeiro projeto para gerar anexos, memorial, diagramas e organizar a homologação.
               </p>
               <Link href="/projeto/novo" className="btn btn-primary flex items-center gap-2">
                 Criar primeiro projeto
@@ -255,34 +227,34 @@ export default function DashboardPage() {
                     <th>Cliente</th>
                     <th>Distribuidora</th>
                     <th>Status</th>
-                    <th>Potencia</th>
+                    <th>Potência</th>
                     <th>Atualizado</th>
-                    <th className="text-right">Acao</th>
+                    <th className="text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentProjects.map((project) => (
-                    <tr key={project.id}>
+                  {recent.map((p) => (
+                    <tr key={p.id}>
                       <td>
                         <div className="project-client-cell">
-                          <strong>{project.cliente?.nome || 'Cliente sem nome'}</strong>
-                          <span>{project.cliente?.cpfCnpj || 'CPF/CNPJ nao informado'}</span>
+                          <strong>{p.cliente?.nome || 'Cliente sem nome'}</strong>
+                          <span>{p.cliente?.cpfCnpj || 'CPF/CNPJ não informado'}</span>
                         </div>
                       </td>
                       <td>
-                        <span className={`distribuidora-tag ${project.distribuidora === 'CEEE' ? 'ceee' : 'rge'}`}>
-                          {project.distribuidora}
+                        <span className={`distribuidora-tag ${p.distribuidora === 'CEEE' ? 'ceee' : 'rge'}`}>
+                          {p.distribuidora}
                         </span>
                       </td>
-                      <td>{getStatusBadge(project.status)}</td>
-                      <td className="project-power-cell">{formatPower(project.sistemaFV?.potenciaInstalada)}</td>
-                      <td>{formatDate(project.atualizadoEm)}</td>
+                      <td>
+                        <span className={statusClassNames[p.status] || 'badge badge-gray'}>
+                          {statusLabels[p.status] || p.status}
+                        </span>
+                      </td>
+                      <td className="project-power-cell">{formatPower(p.sistemaFV?.potenciaInstalada)}</td>
+                      <td>{formatDate(p.atualizadoEm)}</td>
                       <td className="text-right">
-                        <Link
-                          href={`/projeto/editar/${project.id}`}
-                          className="btn btn-sm btn-secondary flex items-center gap-1 project-open-btn"
-                          title="Abrir projeto"
-                        >
+                        <Link href={`/projeto/editar/${p.id}`} className="btn btn-sm btn-secondary flex items-center gap-1 project-open-btn">
                           <Eye size={14} />
                           Abrir
                         </Link>
@@ -295,43 +267,25 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <aside className="dashboard-side-panel" aria-label="Acoes e qualidade">
+        <aside className="dashboard-side-panel" aria-label="Ações e qualidade">
           <div className="side-panel-section">
-            <div className="side-panel-heading">
-              <ShieldCheck size={18} />
-              <span>Pronto para producao</span>
-            </div>
+            <div className="side-panel-heading"><ShieldCheck size={18} /><span>Pronto para produção</span></div>
             <ul className="quality-list">
-              <li>
-                <FileText size={16} />
-                <span>Documentos oficiais em PDF</span>
-              </li>
-              <li>
-                <MapPinned size={16} />
-                <span>Mapa com coordenadas editaveis</span>
-              </li>
-              <li>
-                <Zap size={16} />
-                <span>Calculo automatico de potencia</span>
-              </li>
+              <li><FileText size={16} /><span>Documentos oficiais em PDF</span></li>
+              <li><MapPinned size={16} /><span>Mapa com coordenadas editáveis</span></li>
+              <li><Zap size={16} /><span>Cálculo automático de potência</span></li>
             </ul>
           </div>
 
           <div className="side-panel-section">
-            <div className="side-panel-heading">
-              <Clock3 size={18} />
-              <span>Proxima acao</span>
-            </div>
+            <div className="side-panel-heading"><Clock3 size={18} /><span>Próxima ação</span></div>
             <p className="panel-muted">
-              {lastUpdatedProject
-                ? `Revise ${lastUpdatedProject.cliente?.nome || 'o ultimo projeto'} antes de emitir os documentos.`
+              {last
+                ? `Revise ${last.cliente?.nome || 'o último projeto'} antes de emitir os documentos.`
                 : 'Cadastre o primeiro cliente para liberar o fluxo completo.'}
             </p>
-            <Link
-              href={lastUpdatedProject ? `/projeto/editar/${lastUpdatedProject.id}` : '/projeto/novo'}
-              className="side-panel-link"
-            >
-              {lastUpdatedProject ? 'Abrir ultimo projeto' : 'Comecar agora'}
+            <Link href={last ? `/projeto/editar/${last.id}` : '/projeto/novo'} className="side-panel-link">
+              {last ? 'Abrir último projeto' : 'Começar agora'}
               <ArrowRight size={15} />
             </Link>
           </div>
