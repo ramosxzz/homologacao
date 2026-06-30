@@ -12,7 +12,7 @@ import {
   gerarDiagramaUnifilarRGE,
   gerarDiagramaBlocosCEEE,
   gerarMemorialCEEE,
-  downloadAnexoICEEE,
+  gerarAnexoICEEE,
   downloadPdf,
 } from '@/lib/pdfRenderer';
 import { openDocumentForPrint } from '@/lib/docPrint';
@@ -33,6 +33,7 @@ import {
 
 type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_memorial' | 'ceee_anexo_i';
 type PrintableDocId = Exclude<DocId, 'ceee_anexo_i' | 'ceee_memorial'>;
+type _Unused = PrintableDocId;
 
 interface DocItem {
   id: DocId;
@@ -110,10 +111,10 @@ export default function Step4_Documentos() {
     {
       id: 'ceee_anexo_i',
       title: 'Formulário de Solicitação de Orçamento — Grupo B',
-      desc: 'Anexo I — CEEE NT.00020.EQTL-06 · Formulário em planilha Excel',
+      desc: 'Anexo I — CEEE NT.00020.EQTL · Identificação, UC, dados técnicos e equipamentos',
       badge: 'Anexo I',
-      tipo: 'xlsx',
-      previewPath: '/documentos/ceee/anexo-i.xlsx',
+      tipo: 'pdf',
+      previewPath: '/documentos/ceee/anexo-i.pdf',
     },
   ];
 
@@ -140,6 +141,7 @@ export default function Step4_Documentos() {
       case 'rge_diagrama':  return gerarDiagramaUnifilarRGE(p);
       case 'ceee_diagrama': return gerarDiagramaBlocosCEEE(p);
       case 'ceee_memorial': return gerarMemorialCEEE(p);
+      case 'ceee_anexo_i':  return gerarAnexoICEEE(p);
       default: throw new Error('Documento sem gerador PDF');
     }
   };
@@ -152,6 +154,7 @@ export default function Step4_Documentos() {
       case 'rge_diagrama':  return `Diagrama_Unifilar_RGE_${nc}.pdf`;
       case 'ceee_diagrama': return `Diagrama_Blocos_CEEE_${nc}.pdf`;
       case 'ceee_memorial': return `Memorial_Descritivo_CEEE_${nc}.pdf`;
+      case 'ceee_anexo_i':  return `Anexo_I_CEEE_${nc}.pdf`;
       default:              return 'documento.pdf';
     }
   };
@@ -161,10 +164,6 @@ export default function Step4_Documentos() {
   };
 
   const handleDownload = async (doc: DocItem) => {
-    if (doc.tipo === 'xlsx') {
-      downloadAnexoICEEE();
-      return;
-    }
     setLoadingDoc(doc.id);
     try {
       const bytes = await generatePdf(doc.id);
@@ -178,25 +177,26 @@ export default function Step4_Documentos() {
   };
 
   const handlePrint = async (doc: DocItem) => {
-    if (doc.tipo === 'xlsx') {
-      window.open(doc.previewPath, '_blank');
-      return;
+    // Imprime via janela do navegador: abre o PDF gerado em nova aba
+    setLoadingDoc(doc.id);
+    try {
+      const bytes = await generatePdf(doc.id);
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (e: unknown) {
+      console.error('Erro ao imprimir:', e);
+    } finally {
+      setLoadingDoc(null);
     }
-    const payload = buildPayload();
-    // Usa o sistema de overlay HTML (confiável em qualquer PDF)
-    openDocumentForPrint(doc.id as PrintableDocId, payload);
   };
 
   const handleDownloadAll = async () => {
     for (const doc of activeDocs) {
       setLoadingDoc(doc.id);
       try {
-        if (doc.tipo === 'xlsx') {
-          downloadAnexoICEEE();
-        } else {
-          const bytes = await generatePdf(doc.id);
-          downloadPdf(bytes, getFilename(doc.id));
-        }
+        const bytes = await generatePdf(doc.id);
+        downloadPdf(bytes, getFilename(doc.id));
         await new Promise(r => setTimeout(r, 600));
       } catch (e) {
         console.error(`Erro ao gerar ${doc.id}:`, e);
@@ -336,7 +336,6 @@ export default function Step4_Documentos() {
         <div className="flex flex-col gap-3">
           {activeDocs.map((doc) => {
             const isLoading = loadingDoc === doc.id;
-            const isXlsx = doc.tipo === 'xlsx';
             return (
               <div
                 key={doc.id}
@@ -344,10 +343,7 @@ export default function Step4_Documentos() {
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className={`flex-shrink-0 w-11 h-11 rounded-lg border flex items-center justify-center ${distColor.iconBg}`}>
-                    {isXlsx
-                      ? <FileSpreadsheet size={20} className={distColor.icon} />
-                      : <FileText size={20} className={distColor.icon} />
-                    }
+                    <FileText size={20} className={distColor.icon} />
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-sm font-bold text-slate-200 leading-snug">{doc.title}</h4>
@@ -371,24 +367,22 @@ export default function Step4_Documentos() {
                   </button>
 
                   {/* Imprimir preenchido */}
-                  {!isXlsx && (
-                    <button
-                      type="button"
-                      onClick={() => handlePrint(doc)}
-                      className="btn btn-secondary btn-icon-only"
-                      title="Imprimir PDF preenchido"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handlePrint(doc)}
+                    className="btn btn-secondary btn-icon-only"
+                    title="Abrir PDF preenchido em nova aba"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                  </button>
 
                   {/* Baixar preenchido */}
                   <button
                     type="button"
                     onClick={() => handleDownload(doc)}
                     className="btn btn-primary btn-icon-only"
-                    title={isXlsx ? 'Baixar planilha Excel' : 'Baixar PDF preenchido'}
+                    title="Baixar PDF preenchido"
                     disabled={isLoading}
                   >
                     {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}

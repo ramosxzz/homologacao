@@ -688,6 +688,96 @@ function MemorialCEEEDoc({ data }: { data: ProjetoData }) {
   );
 }
 
+// ─── ANEXO I — CEEE ───────────────────────────────────────────────────────────
+function AnexoICEEEDoc({ data }: { data: ProjetoData }) {
+  const potInst = fmtPower(data.sistemaFV.potenciaInstalada);
+  const potCA = fmtPower(data.sistemaFV.inversorPotencia * (parseInt(data.sistemaFV.quantidadeInversores) || 1));
+  const qtdInv = data.sistemaFV.quantidadeInversores || '1';
+  const qtdMod = data.sistemaFV.quantidadeModulos || '0';
+  const tensao = data.unidadeConsumidora.tensaoAtendimento || '—';
+  const fases = faseLabel[data.unidadeConsumidora.tipoConexao] || '—';
+  const carga = data.unidadeConsumidora.cargaInstalada ? `${data.unidadeConsumidora.cargaInstalada} kW` : '—';
+  const consumo = data.unidadeConsumidora.consumoMedio ? `${data.unidadeConsumidora.consumoMedio} kWh/mês` : '—';
+
+  return (
+    <Document>
+      <Page size="A4" style={base.page}>
+        <Header accent={COLOR.ceee} eyebrow="CEEE Equatorial" title="Anexo I" />
+        <Text style={base.docTitle}>
+          Formulário de Solicitação de Orçamento de Conexão · Grupo B{'\n'}
+          Microgeração e Minigeração Distribuída — NT.00020.EQTL
+        </Text>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>1. Identificação do Solicitante</Text>
+          <Field label="Nome / Razão Social do Titular" value={data.cliente.nome} />
+          <Field label="CPF / CNPJ" value={data.cliente.cpfCnpj} mono />
+          <Field label="RG / Identidade" value={data.cliente.rg || '—'} mono />
+          <Field label="Telefone / Celular" value={data.cliente.celular || data.cliente.telefone || '—'} />
+          <Field label="E-mail" value={data.cliente.email || '—'} />
+        </View>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>2. Identificação da Unidade Consumidora</Text>
+          <Field label="Número da UC (Nº Instalação)" value={data.unidadeConsumidora.codigo} mono />
+          <Field label="Parceiro de Negócio (Conta Contrato)" value={data.unidadeConsumidora.contaContrato} mono />
+          <Field label="Classe de Consumo" value={data.unidadeConsumidora.classe || '—'} />
+          <Field label="Tensão Nominal" value={tensao} />
+          <Field label="Tipo de Fornecimento" value={fases} />
+          <Field label="Tipo de Ramal de Entrada" value={data.unidadeConsumidora.tipoRamal === 'aereo' ? 'Aéreo' : 'Subterrâneo'} />
+          <Field label="Carga Instalada" value={carga} />
+          <Field label="Consumo Médio Mensal (12 meses)" value={consumo} />
+        </View>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>3. Endereço de Instalação</Text>
+          <Field label="Logradouro / Nº / Complemento" value={`${data.endereco.logradouro}, ${data.endereco.numero}${data.endereco.complemento ? ' - ' + data.endereco.complemento : ''}`} />
+          <Field label="Bairro" value={data.endereco.bairro} />
+          <Field label="CEP · Cidade · UF" value={`${data.endereco.cep} · ${data.endereco.cidade}/${data.endereco.uf}`} />
+          <Field label="Latitude · Longitude (SIRGAS 2000)" value={`${data.localizacao.latitude.toFixed(6)} · ${data.localizacao.longitude.toFixed(6)}`} mono />
+        </View>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>4. Dados Técnicos da Microgeração</Text>
+          <View style={base.row}>
+            <Text style={base.labelCell}>Tipo de fonte primária</Text>
+            <Text style={base.valueCell}>☒ Solar fotovoltaica</Text>
+          </View>
+          <View style={base.row}>
+            <Text style={base.labelCell}>Tipo de geração</Text>
+            <Text style={base.valueCell}>☒ Empregando inversor estático</Text>
+          </View>
+          <Field label="Potência instalada (CC)" value={`${potInst} kWp`} />
+          <Field label="Potência nominal (CA)" value={`${potCA} kW`} />
+          <View style={base.row}>
+            <Text style={base.labelCell}>Modalidade de Compensação</Text>
+            <Text style={base.valueCell}>☒ Autoconsumo local   ☐ Autoconsumo remoto   ☐ Geração compartilhada</Text>
+          </View>
+        </View>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>5. Equipamentos</Text>
+          <Field label="Módulos (qtd × fabricante × modelo)" value={`${qtdMod} × ${data.sistemaFV.moduloFabricante} ${data.sistemaFV.moduloModelo}`} />
+          <Field label="Potência unitária dos módulos" value={`${data.sistemaFV.moduloPotencia} Wp`} />
+          <Field label="Inversor(es) (qtd × fabricante × modelo)" value={`${qtdInv} × ${data.sistemaFV.inversorFabricante} ${data.sistemaFV.inversorModelo}`} />
+          <Field label="Potência unitária dos inversores" value={`${data.sistemaFV.inversorPotencia} kW`} />
+          <Field label="Disjuntor de geração" value={data.sistemaFV.disjuntorGeracao || '40 A'} />
+          <Field label="DPS CC · DPS CA" value={`${data.sistemaFV.dpsCC || '1000 V'} · ${data.sistemaFV.dpsCA || '275 V'}`} />
+        </View>
+
+        <View style={base.section}>
+          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>6. Responsabilidade Técnica</Text>
+          <Field label="Nome do Responsável Técnico" value={data.engenheiro || '—'} />
+          <Field label="Registro CREA" value={data.crea || '—'} mono />
+        </View>
+
+        <Footer cidade={`${data.endereco.cidade} - ${data.endereco.uf}`} />
+        <Text style={base.pageNumber} render={({ pageNumber, totalPages }) => `Anexo I CEEE · página ${pageNumber} de ${totalPages}`} fixed />
+      </Page>
+    </Document>
+  );
+}
+
 // ─── Wrapper: Document → Uint8Array ───────────────────────────────────────────
 async function render(docEl: React.ReactElement): Promise<Uint8Array> {
   // react-pdf espera ReactElement<DocumentProps>; cast manual evita o erro de tipos.
@@ -710,6 +800,9 @@ export async function gerarDiagramaBlocosCEEE(data: ProjetoData): Promise<Uint8A
 }
 export async function gerarMemorialCEEE(data: ProjetoData): Promise<Uint8Array> {
   return render(<MemorialCEEEDoc data={data} />);
+}
+export async function gerarAnexoICEEE(data: ProjetoData): Promise<Uint8Array> {
+  return render(<AnexoICEEEDoc data={data} />);
 }
 
 // Reexporta downloads (mantém compatibilidade com Step4)

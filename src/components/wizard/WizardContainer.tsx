@@ -13,7 +13,7 @@ import Step4_Documentos from './Step4_Documentos';
 import { ArrowLeft, ArrowRight, Save, AlertCircle, Check, Loader2 } from 'lucide-react';
 
 export default function WizardContainer() {
-  const { state, nextStep, prevStep } = useProjeto();
+  const { state, nextStep, prevStep, canAdvance } = useProjeto();
   const { userData } = useAuth();
 
   const [draftSaving, setDraftSaving] = useState(false);
@@ -39,61 +39,16 @@ export default function WizardContainer() {
 
   const handleNextClick = () => {
     setErrors([]);
-    
-    // Run context check
-    const stepValidation = state.currentStep === 0
-      ? validateStep0()
-      : state.currentStep === 1
-      ? validateStep1()
-      : state.currentStep === 2
-      ? validateStep2()
-      : { valido: true, erros: [] };
-
-    if (!stepValidation.valido) {
-      setErrors(stepValidation.erros);
+    const check = canAdvance(state.currentStep);
+    if (!check.valido) {
+      setErrors(check.erros);
+      // Foca o topo pra usuário ver o alerta
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-
     nextStep();
   };
 
-  const validateStep0 = () => {
-    const list: string[] = [];
-    if (!cliente.nome.trim()) list.push('Nome do Cliente é obrigatório.');
-    return { valido: list.length === 0, erros: list };
-  };
-
-  const validateStep1 = () => {
-    const list: string[] = [];
-    if (!endereco.cep.trim()) list.push('CEP é obrigatório.');
-    if (!endereco.numero.trim()) list.push('Número da residência é obrigatório.');
-    if (!endereco.logradouro.trim()) list.push('Logradouro é obrigatório.');
-    if (!endereco.bairro.trim()) list.push('Bairro é obrigatório.');
-    if (!endereco.cidade.trim()) list.push('Cidade é obrigatória.');
-    return { valido: list.length === 0, erros: list };
-  };
-
-  const validateStep2 = () => {
-    const list: string[] = [];
-    if (!sistemaFV.moduloId) list.push('Selecione um fabricante e modelo de módulo.');
-    if (!sistemaFV.quantidadeModulos || parseInt(sistemaFV.quantidadeModulos) <= 0) list.push('Informe a quantidade de módulos.');
-    if (!sistemaFV.inversorId) list.push('Selecione um fabricante e modelo de inversor.');
-    if (!sistemaFV.quantidadeInversores || parseInt(sistemaFV.quantidadeInversores) <= 0) list.push('Informe a quantidade de inversores.');
-    
-    let totalStringsModules = 0;
-    sistemaFV.strings.forEach(s => {
-      const series = parseInt(s.modulosEmSerie) || 0;
-      const parallel = parseInt(s.stringsParalelo) || 0;
-      totalStringsModules += series * parallel;
-    });
-
-    const targetQty = parseInt(sistemaFV.quantidadeModulos) || 0;
-    if (targetQty > 0 && totalStringsModules !== targetQty) {
-      list.push(`Total de módulos nas strings (${totalStringsModules}) difere da quantidade total de módulos (${targetQty}).`);
-    }
-
-    return { valido: list.length === 0, erros: list };
-  };
 
   // Draft Save Handler
   const handleSaveDraft = async () => {
