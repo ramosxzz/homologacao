@@ -53,58 +53,96 @@ function parseHistoryAverage(text: string): string | undefined {
   return Math.round(avg).toString();
 }
 
+/** Histórico CEEE: "DEZ 29 193,0 6,66" (mês, dias, kWh c/vírgula, média diária) */
+function parseCEEEHistoryAverage(text: string): string | undefined {
+  const values: number[] = [];
+  const re = /\b(?:JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\s+(\d{2})\s+(\d{1,4}),\d+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) && values.length < 13) {
+    const days = Number(m[1]);
+    const consumption = Number(m[2]);
+    if (consumption >= 20 && consumption <= 5000 && days >= 20 && days <= 35) {
+      values.push(consumption);
+    }
+  }
+  if (!values.length) return undefined;
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  return Math.round(avg).toString();
+}
+
 export function parseCEEE(text: string): ParsedFatura {
   const result: ParsedFatura = { distribuidora: 'CEEE' };
 
-  const pagadorRegex = /Pagador\s*\n+([^\n]+)\n+([^\n]+)\n+CEP\s*([\d-]+)\s*-\s*([^-]+)-\s*([A-Z]{2})\n+(?:CPF|CNPJ):\s*([\d./-]+)/i;
-  const match = text.match(pagadorRegex);
+  // Bloco "Pagador" (parte inferior) — fonte canônica de nome + CPF real + endereço completo.
+  // Formato: "Pagador\nNOME CPF: xxx.xxx.xxx-xx\nLOGRADOURO, N - - BAIRRO\nCEP NNNNN-NNN - CIDADE - UF"
+  const pagadorBlock = text.match(
+    /Pagador\s*\n+([^\n]+?)\s+(?:CPF|CNPJ):\s*([\d./-]+)\s*\n+([^\n]+)\n+CEP\s*(\d{5}-?\d{3})\s*-\s*([^-\n]+?)\s*-\s*([A-Z]{2})/i
+  );
 
-  if (match) {
-    result.nome = match[1].trim();
-    const addressLine = match[2].trim();
-    result.cep = match[3].trim();
-    result.cidade = match[4].trim();
-    result.uf = match[5].trim();
-    result.cpfCnpj = match[6].trim();
+  if (pagadorBlock) {
+    result.nome = normalizeSpaces(pagadorBlock[1]);
+    result.cpfCnpj = pagadorBlock[2].trim();
+    const addressLine = pagadorBlock[3].trim();
+    result.cep = pagadorBlock[4].trim();
+    result.cidade = normalizeSpaces(pagadorBlock[5]);
+    result.uf = pagadorBlock[6].trim().toUpperCase();
 
-    const addrParts = addressLine.split(',');
-    if (addrParts.length >= 2) {
-      result.logradouro = addrParts[0].trim();
-      const rest = addrParts.slice(1).join(',').trim();
-      const numMatch = rest.match(/^(\d+)/);
-      if (numMatch) result.numero = numMatch[1];
-
-      const neighborhoodMatch = rest.match(/-\s*-\s*(.+)$/);
-      if (neighborhoodMatch) {
-        result.bairro = neighborhoodMatch[1].trim();
-      } else {
-        const parts = rest.split('-');
-        if (parts.length >= 2) result.bairro = parts[parts.length - 1].trim();
+    // "LOGRADOURO, 938 - - BAIRRO" — vírgula separa rua de número, "- -" separa endereço de bairro
+    const addrMatch = addressLine.match(/^(.+?),\s*(\d+[A-Z]?)\s*-\s*-?\s*(.+)$/);
+    if (addrMatch) {
+      result.logradouro = normalizeSpaces(addrMatch[1]);
+      result.numero = addrMatch[2].trim();
+      result.bairro = normalizeSpaces(addrMatch[3]);
+    } else {
+      const parts = addressLine.split(',');
+      result.logradouro = normalizeSpaces(parts[0] || '');
+      if (parts[1]) {
+        const numMatch = parts[1].match(/^\s*(\d+[A-Z]?)/);
+        if (numMatch) result.numero = numMatch[1];
+        const bairroMatch = parts[1].match(/-\s*-?\s*(.+)$/);
+        if (bairroMatch) result.bairro = normalizeSpaces(bairroMatch[1]);
       }
     }
   }
 
-  if (result.nome) {
-    const ucRegex = new RegExp(`${escapeRegex(result.nome)}\\s*\\n+(\\d+)`, 'i');
-    const ucMatch = text.match(ucRegex);
-    if (ucMatch) result.codigoUC = ucMatch[1].trim();
+  // Cabeçalho — UC (8 dígitos) e Parceiro de Negócio (10 dígitos) ficam como linhas próprias
+  // perto do nome do titular. Procura entre o início e o "Pagador".
+  const headerEnd = text.search(/Pagador\b/i);
+  const header = headerEnd > 0 ? text.slice(0, headerEnd) : text;
+
+  // Parceiro de Negócio = 10 dígitos isolados
+  const parceiroMatch = header.match(/(?:^|\n)\s*(\d{10})\s*(?:\n|$)/m);
+  if (parceiroMatch) result.contaContrato = parceiroMatch[1];
+
+  // Número da UC = 8 dígitos isolados (mais antigo) ou 10 dígitos novo padrão ANEEL
+  const ucMatch = header.match(/(?:^|\n)\s*(\d{8})\s*(?:\n|$)/m);
+  if (ucMatch) result.codigoUC = ucMatch[1];
+
+  // Tipo de fornecimento (BIFASICO/TRIFASICO/MONOFASICO) — sem acento na fatura CEEE
+  if (/BIF[AÁ]SICO/i.test(text)) result.tipoConexao = 'bifasica';
+  else if (/TRIF[AÁ]SICO/i.test(text)) result.tipoConexao = 'trifasica';
+  else if (/MONOF[AÁ]SICO/i.test(text)) result.tipoConexao = 'monofasica';
+
+  // Classificação
+  if (/RESIDENCIAL/i.test(text)) result.classe = 'residencial';
+  else if (/COMERCIAL/i.test(text)) result.classe = 'comercial';
+  else if (/INDUSTRIAL/i.test(text)) result.classe = 'industrial';
+  else if (/RURAL/i.test(text)) result.classe = 'rural';
+
+  // Tensão Nominal "127-127" / "220-220" / "127-220" / "220-380"
+  const tensaoMatch = text.match(/(?:Tens[ãa]o\s+Nominal\s+Disp\.?:?\s*)?(\d{3})-(\d{3})\b/i);
+  if (tensaoMatch) {
+    const a = tensaoMatch[1];
+    const b = tensaoMatch[2];
+    // Normaliza pros valores aceitos no wizard CEEE: 127/220V, 220/380V, 220V
+    if (a === '127' && b === '127') result.tensaoAtendimento = '127/220V';
+    else if (a === '220' && b === '220') result.tensaoAtendimento = '220V';
+    else if (a === '220' && b === '380') result.tensaoAtendimento = '220/380V';
+    else if (a === '127' && b === '220') result.tensaoAtendimento = '127/220V';
+    else result.tensaoAtendimento = `${a}/${b}V`;
   }
 
-  if (!result.codigoUC) {
-    const ucMatches = text.match(/\b\d{8,10}\b/g);
-    const cepDigits = result.cep?.replace('-', '');
-    if (ucMatches) result.codigoUC = ucMatches.find((value) => value !== cepDigits);
-  }
-
-  if (/BIF[AÁ]SICO/i.test(text)) {
-    result.tipoConexao = 'bifasica';
-  } else if (/TRIF[AÁ]SICO/i.test(text)) {
-    result.tipoConexao = 'trifasica';
-  } else if (/MONOF[AÁ]SICO/i.test(text)) {
-    result.tipoConexao = 'monofasica';
-  }
-
-  result.consumoMedio = parseHistoryAverage(text);
+  result.consumoMedio = parseCEEEHistoryAverage(text) || parseHistoryAverage(text);
 
   return result;
 }
