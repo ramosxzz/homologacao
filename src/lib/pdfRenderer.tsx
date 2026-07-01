@@ -8,6 +8,14 @@ import React from 'react';
 import { Document, Page, View, Text, StyleSheet, Image, pdf, Svg, Line, Circle, Rect, Path } from '@react-pdf/renderer';
 import type { ProjetoData } from './pdfGenerator';
 
+// SVG Text helper: react-pdf SVGTextProps não expõe fontFamily/fontSize como props diretas
+const ST = Text as unknown as React.ComponentType<{
+  x: number | string; y: number | string;
+  fontFamily?: string; fontSize?: number;
+  textAnchor?: 'start' | 'middle' | 'end';
+  fill?: string; children: React.ReactNode;
+}>;
+
 // ─── Tokens visuais ───────────────────────────────────────────────────────────
 const COLOR = {
   ink: '#0f172a',
@@ -413,208 +421,336 @@ function AnexoFRGEDoc({ data }: { data: ProjetoData }) {
   );
 }
 
-// ─── DIAGRAMA UNIFILAR — RGE ──────────────────────────────────────────────────
-function DiagramaUnifilarRGEDoc({ data }: { data: ProjetoData }) {
-  const potInst = fmtPower(data.sistemaFV.potenciaInstalada);
-  const potCA = fmtPower(data.sistemaFV.inversorPotencia * (parseInt(data.sistemaFV.quantidadeInversores) || 1));
-  const qtdInv = data.sistemaFV.quantidadeInversores || '1';
-  const qtdMod = data.sistemaFV.quantidadeModulos || '0';
-  const tensao = data.unidadeConsumidora.tensaoAtendimento || '—';
-  const fases = faseLabel[data.unidadeConsumidora.tipoConexao] || '—';
-  const disjuntor = data.sistemaFV.disjuntorGeracao || '32 A';
+// ─── DIAGRAMA DE BLOCOS — RGE e CEEE (SVG fiel ao referencial) ───────────────
+function DiagramaBlocosDoc({ data }: { data: ProjetoData }) {
+  const uc = data.unidadeConsumidora.codigo || '—';
+  const tensao = data.unidadeConsumidora.tensaoAtendimento || '127/220V';
+  const disjuntor = data.sistemaFV.disjuntorGeracao || '40 A';
+  const dpsCC = data.sistemaFV.dpsCC || '1.000V';
+  const dpsCA = data.sistemaFV.dpsCA || '750V';
+  const cidade = data.endereco.cidade || '';
+  const endStr = [data.endereco.logradouro, data.endereco.numero, data.endereco.complemento]
+    .filter(Boolean).join(', ')
+    + (data.endereco.bairro ? ` - ${data.endereco.bairro}` : '')
+    + (data.endereco.cidade ? `, ${data.endereco.cidade}/${data.endereco.uf}` : '');
+  const rtStr = `${data.engenheiro || '—'} - ${data.crea || '—'}`;
 
-  // Coordenadas SVG do diagrama vertical (página A4: 595 × 842pt)
-  const sx = 297; // eixo X central
-  // Y descende: rede (topo) → caixa medição → disjuntor → inversor → strings → gerador
   return (
     <Document>
-      <Page size="A4" style={base.page}>
-        <Header eyebrow="RGE Sul · CPFL Energia" title="Diagrama Unifilar" />
-        <Text style={base.docTitle}>Projeto de Microgeração Fotovoltaica</Text>
+      <Page size="A4" style={{ padding: 0, backgroundColor: '#fff' }}>
+        <Svg viewBox="0 0 210 297" style={{ width: 595, height: 841 }}>
+          <Rect x="10" y="10" width="190" height="277" fill="white" stroke="black" strokeWidth="0.35"/>
 
-        <View style={base.section}>
-          <Text style={base.sectionTitle}>Identificação</Text>
-          <Field label="Cliente" value={data.cliente.nome} />
-          <Field label="Endereço" value={`${data.endereco.logradouro}, ${data.endereco.numero} · ${data.endereco.bairro} · ${data.endereco.cidade}/${data.endereco.uf}`} />
-          <Field label="UC (Nº Instalação)" value={data.unidadeConsumidora.codigo} mono />
-          <Field label="Responsável Técnico" value={`${data.engenheiro || '—'} · CREA ${data.crea || '—'}`} />
-        </View>
+          <ST x="105" y="24" fontFamily="Helvetica-Bold" fontSize={9} textAnchor="middle" fill="#000">Diagrama de Blocos</ST>
+          <ST x="105" y="34" fontFamily="Helvetica-Bold" fontSize={5} textAnchor="middle" fill="#000">Projeto de Microgeração Fotovoltaica</ST>
 
-        <Svg viewBox="0 0 600 470" style={{ marginTop: 12, marginBottom: 4, width: '100%', height: 380 }}>
-          {/* Rede secundária no topo */}
-          <Line x1={sx} y1={20} x2={sx} y2={50} stroke="#000" strokeWidth={1.2} />
-          <Path d={`M ${sx - 6} 26 L ${sx} 20 L ${sx + 6} 26`} stroke="#000" strokeWidth={1.2} fill="none" />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 4, left: sx + 18 }}>Rede Secundária BT (Distribuidora)</Text>
+          <ST x="13" y="50" fontFamily="Helvetica-Bold" fontSize={3.2} fill="#000">{'Cliente: ' + data.cliente.nome}</ST>
+          <ST x="13" y="55" fontFamily="Helvetica-Bold" fontSize={3.2} fill="#000">{'Localização: ' + endStr}</ST>
+          <ST x="13" y="60" fontFamily="Helvetica-Bold" fontSize={3.2} fill="#000">{'Responsável técnico: ' + rtStr}</ST>
 
-          {/* Caixa de Medição (retângulo) */}
-          <Rect x={sx - 70} y={60} width={140} height={80} stroke="#000" strokeWidth={1} fill="none" />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 78, left: sx + 80 }}>Caixa de Medição</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 90, left: sx + 80, color: COLOR.muted }}>Medidor Bidirecional</Text>
-          <Text style={{ fontSize: 7, position: 'absolute', top: 100, left: sx + 80, color: COLOR.muted }}>UC {data.unidadeConsumidora.codigo}</Text>
+          <Line x1="10" y1="68" x2="200" y2="68" stroke="black" strokeWidth="0.35"/>
 
-          {/* M dentro caixa */}
-          <Circle cx={sx} cy={100} r={14} stroke="#000" strokeWidth={1} fill="none" />
-          <Text style={{ fontSize: 9, position: 'absolute', top: 95, left: sx - 4 }}>M</Text>
+          {/* GERAÇÃO */}
+          <ST x="13" y="92" fontFamily="Helvetica" fontSize={3.2} fill="#000">GERAÇÃO</ST>
+          <Rect x="13" y="94" width="17" height="28" fill="#f8f8f8" stroke="black" strokeWidth="0.35"/>
+          <Path d="M 13,94 L 21.5,100 L 30,94" fill="none" stroke="black" strokeWidth="0.35"/>
+          <ST x="21.5" y="107" fontFamily="Helvetica" fontSize={3.2} textAnchor="middle" fill="#000">String CC</ST>
 
-          {/* Disjuntor de entrada (dentro caixa, parte inferior) */}
-          <Line x1={sx} y1={140} x2={sx} y2={160} stroke="#000" strokeWidth={1.2} />
-          <Line x1={sx - 5} y1={145} x2={sx + 7} y2={155} stroke="#000" strokeWidth={1.2} />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 145, left: sx + 16 }}>Disjuntor entrada · {disjuntor}</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 156, left: sx + 16, color: COLOR.muted }}>{tensao} · {fases}</Text>
+          <Line x1="30" y1="108" x2="43" y2="108" stroke="black" strokeWidth="0.35"/>
+          <ST x="34" y="101" fontFamily="Helvetica" fontSize={2.5} fill="#000">{'6 mm²'}</ST>
+          <ST x="34" y="105" fontFamily="Helvetica" fontSize={2.5} fill="#000">{dpsCC}</ST>
 
-          {/* CARGAS branch */}
-          <Line x1={sx} y1={170} x2={sx} y2={195} stroke="#000" strokeWidth={1.2} />
-          <Line x1={sx} y1={195} x2={sx + 140} y2={195} stroke="#000" strokeWidth={1.2} />
-          <Path d={`M ${sx + 134} 191 L ${sx + 142} 195 L ${sx + 134} 199`} stroke="#000" strokeWidth={1.2} fill="none" />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 188, left: sx + 150 }}>CARGAS</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 200, left: sx + 150, color: COLOR.muted }}>
-            {data.unidadeConsumidora.cargaInstalada ? `${data.unidadeConsumidora.cargaInstalada} kW instalados` : ''}
-          </Text>
+          {/* PROTEÇÃO CC */}
+          <ST x="46" y="95" fontFamily="Helvetica" fontSize={3.2} fill="#000">PROTEÇÃO CC</ST>
+          <Rect x="46" y="101" width="21" height="18" fill="#f8f8f8" stroke="black" strokeWidth="0.35"/>
+          <ST x="56.5" y="115" fontFamily="Helvetica-Bold" fontSize={16} textAnchor="middle" fill="#000">CC</ST>
 
-          {/* Linha para geração */}
-          <Line x1={sx} y1={195} x2={sx} y2={230} stroke="#000" strokeWidth={1.2} />
+          <Line x1="67" y1="108" x2="87" y2="108" stroke="black" strokeWidth="0.35"/>
+          <ST x="71" y="101" fontFamily="Helvetica" fontSize={2.5} fill="#000">{'6 mm²'}</ST>
+          <ST x="71" y="105" fontFamily="Helvetica" fontSize={2.5} fill="#000">{dpsCC}</ST>
 
-          {/* Disjuntor + DPS CA (geração) */}
-          <Line x1={sx - 5} y1={235} x2={sx + 7} y2={245} stroke="#000" strokeWidth={1.2} />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 232, left: sx + 16 }}>Disjuntor geração · {disjuntor}</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 243, left: sx + 16, color: COLOR.muted }}>DPS CA {data.sistemaFV.dpsCA || '275 V'} · Cabos 10 mm²</Text>
+          {/* INVERSOR */}
+          <ST x="80" y="95" fontFamily="Helvetica" fontSize={3.2} fill="#000">INVERSOR</ST>
+          <Rect x="83" y="96" width="18" height="18" fill="#f8f8f8" stroke="#777" strokeWidth="0.35"/>
+          <Path d="M 92,101 L 97,106 L 92,111 L 87,106 Z" fill="none" stroke="black" strokeWidth="0.35"/>
+          <Line x1="88" y1="113" x2="98" y2="99" stroke="black" strokeWidth="0.35"/>
+          <Circle cx="88" cy="108" r="1.2" fill="none" stroke="black" strokeWidth="0.35"/>
+          <Circle cx="98" cy="108" r="1.2" fill="none" stroke="black" strokeWidth="0.35"/>
 
-          {/* Linha para inversor */}
-          <Line x1={sx} y1={250} x2={sx} y2={280} stroke="#000" strokeWidth={1.2} />
+          <Line x1="101" y1="108" x2="121" y2="108" stroke="black" strokeWidth="0.35"/>
+          <ST x="107" y="101" fontFamily="Helvetica" fontSize={2.5} fill="#000">{'6 mm²'}</ST>
+          <ST x="107" y="105" fontFamily="Helvetica" fontSize={2.5} fill="#000">{dpsCA}</ST>
 
-          {/* Inversor (quadrado com diagonal) */}
-          <Rect x={sx - 20} y={285} width={40} height={28} stroke="#000" strokeWidth={1} fill="none" />
-          <Line x1={sx - 20} y1={285} x2={sx + 20} y2={313} stroke="#000" strokeWidth={1} />
-          <Text style={{ fontSize: 8, position: 'absolute', top: 290, left: sx + 30 }}>INVERSOR</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 301, left: sx + 30, color: COLOR.muted }}>
-            {qtdInv}× {data.sistemaFV.inversorFabricante} {data.sistemaFV.inversorModelo}
-          </Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 311, left: sx + 30, color: COLOR.muted }}>{potCA} kW CA</Text>
+          {/* PROTEÇÃO CA */}
+          <ST x="114" y="95" fontFamily="Helvetica" fontSize={3.2} fill="#000">PROTEÇÃO CA</ST>
+          <Rect x="122" y="101" width="22" height="18" fill="#f8f8f8" stroke="black" strokeWidth="0.35"/>
+          <ST x="133" y="115" fontFamily="Helvetica-Bold" fontSize={16} textAnchor="middle" fill="#000">CA</ST>
+          <ST x="132" y="123" fontFamily="Helvetica" fontSize={2.5} fill="#000">{disjuntor}</ST>
 
-          {/* Linha para gerador */}
-          <Line x1={sx} y1={313} x2={sx} y2={350} stroke="#000" strokeWidth={1.2} />
+          <Line x1="144" y1="108" x2="168" y2="108" stroke="black" strokeWidth="0.35"/>
+          <ST x="149" y="101" fontFamily="Helvetica" fontSize={2.5} fill="#000">{'10.00 mm²'}</ST>
+          <ST x="149" y="105" fontFamily="Helvetica" fontSize={2.5} fill="#000">{dpsCA}</ST>
 
-          {/* DPS CC + cabos CC à esquerda */}
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 320, left: sx - 200, color: COLOR.muted }}>DPS CC {data.sistemaFV.dpsCC || '1000 V'}</Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 332, left: sx - 200, color: COLOR.muted }}>Cabos CC 6 mm² · 1000 V</Text>
+          {/* MEDIÇÃO */}
+          <ST x="158" y="95" fontFamily="Helvetica" fontSize={3.2} textAnchor="middle" fill="#000">MEDIÇÃO</ST>
+          <Circle cx="166" cy="110" r="9" fill="#f8f8f8" stroke="black" strokeWidth="0.35"/>
+          <ST x="166" y="116" fontFamily="Helvetica-Bold" fontSize={16} textAnchor="middle" fill="#000">M</ST>
+          <ST x="166" y="124" fontFamily="Helvetica" fontSize={2.2} textAnchor="middle" fill="#000">Unidade consumidora</ST>
+          <ST x="166" y="128" fontFamily="Helvetica" fontSize={2.2} textAnchor="middle" fill="#000">{'UC: ' + uc}</ST>
 
-          {/* Gerador (módulos em retângulo) */}
-          <Rect x={sx - 60} y={360} width={120} height={60} stroke="#000" strokeWidth={1} fill="none" />
-          <Line x1={sx - 60} y1={375} x2={sx + 60} y2={375} stroke="#000" strokeWidth={0.6} />
-          <Line x1={sx - 60} y1={390} x2={sx + 60} y2={390} stroke="#000" strokeWidth={0.6} />
-          <Line x1={sx - 60} y1={405} x2={sx + 60} y2={405} stroke="#000" strokeWidth={0.6} />
-          <Text style={{ fontSize: 8, fontFamily: FONT.sansBold, position: 'absolute', top: 365, left: sx - 50 }}>
-            GERADOR FV
-          </Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 380, left: sx - 50, color: COLOR.muted }}>
-            {qtdMod}× {data.sistemaFV.moduloFabricante} {data.sistemaFV.moduloModelo}
-          </Text>
-          <Text style={{ fontSize: 7.5, position: 'absolute', top: 392, left: sx - 50, color: COLOR.muted }}>
-            {data.sistemaFV.moduloPotencia} Wp/módulo · {potInst} kWp total
-          </Text>
-          <Text style={{ fontSize: 7, position: 'absolute', top: 405, left: sx - 50, color: COLOR.muted }}>
-            {(data.sistemaFV.strings || []).map((s, i) => `S${i + 1}: ${s.modulosEmSerie}×${s.stringsParalelo}p`).join('  ')}
-          </Text>
+          <Line x1="175" y1="108" x2="197" y2="108" stroke="black" strokeWidth="0.35"/>
+          <ST x="179" y="101" fontFamily="Helvetica" fontSize={2.5} fill="#000">{'10.00 mm²'}</ST>
+          <ST x="179" y="105" fontFamily="Helvetica" fontSize={2.5} fill="#000">{dpsCA}</ST>
+
+          {/* REDE */}
+          <Line x1="185" y1="94" x2="185" y2="124" stroke="black" strokeWidth="0.7"/>
+          <ST x="188" y="101" fontFamily="Helvetica" fontSize={3.2} fill="#000">REDE</ST>
+          <ST x="188" y="106" fontFamily="Helvetica" fontSize={3.2} fill="#000">DE</ST>
+          <ST x="188" y="111" fontFamily="Helvetica" fontSize={3.2} fill="#000">DISTRIBUIÇÃO</ST>
+          <ST x="194" y="123" fontFamily="Helvetica" fontSize={2.5} fill="#000">{tensao}</ST>
+
+          {/* Assinaturas */}
+          <Line x1="10" y1="254" x2="200" y2="254" stroke="black" strokeWidth="0.35"/>
+          <ST x="105" y="266" fontFamily="Helvetica-Bold" fontSize={3} textAnchor="middle" fill="#000">Assinaturas:</ST>
+
+          <Line x1="15" y1="274" x2="34" y2="274" stroke="black" strokeWidth="0.35"/>
+          <ST x="24.5" y="279" fontFamily="Helvetica-Bold" fontSize={3} textAnchor="middle" fill="#000">{cidade}</ST>
+          <ST x="24.5" y="283" fontFamily="Helvetica" fontSize={2.5} textAnchor="middle" fill="#000">Local</ST>
+
+          <Line x1="45" y1="274" x2="64" y2="274" stroke="black" strokeWidth="0.35"/>
+          <ST x="54.5" y="279" fontFamily="Helvetica-Bold" fontSize={3} textAnchor="middle" fill="#000">{today()}</ST>
+          <ST x="54.5" y="283" fontFamily="Helvetica" fontSize={2.5} textAnchor="middle" fill="#000">Data</ST>
+
+          <Line x1="80" y1="274" x2="125" y2="274" stroke="black" strokeWidth="0.35"/>
+          <ST x="102.5" y="279" fontFamily="Helvetica-Bold" fontSize={3} textAnchor="middle" fill="#000">Responsável Técnico</ST>
+
+          <Line x1="145" y1="274" x2="190" y2="274" stroke="black" strokeWidth="0.35"/>
+          <ST x="167.5" y="279" fontFamily="Helvetica-Bold" fontSize={3} textAnchor="middle" fill="#000">Proprietário</ST>
         </Svg>
-
-        <View style={[base.section, { marginTop: 8 }]}>
-          <Text style={base.sectionTitle}>Resumo Técnico</Text>
-          <Field label="Tensão de atendimento" value={`${tensao} · ${fases}`} />
-          <Field label="Potência instalada (CC)" value={`${potInst} kWp`} />
-          <Field label="Potência nominal (CA)" value={`${potCA} kW`} />
-          <Field label="Módulos" value={`${qtdMod} × ${data.sistemaFV.moduloFabricante} ${data.sistemaFV.moduloModelo} (${data.sistemaFV.moduloPotencia} Wp)`} />
-          <Field label="Inversor(es)" value={`${qtdInv} × ${data.sistemaFV.inversorFabricante} ${data.sistemaFV.inversorModelo}`} />
-          <Field label="Proteção CC / CA" value={`DPS CC ${data.sistemaFV.dpsCC || '1000 V'} · DPS CA ${data.sistemaFV.dpsCA || '275 V'} · Disjuntor ${disjuntor}`} />
-        </View>
-
-        <Footer cidade={`${data.endereco.cidade} - ${data.endereco.uf}`} />
-        <Text style={base.pageNumber} render={({ pageNumber, totalPages }) => `Diagrama Unifilar · página ${pageNumber} de ${totalPages}`} fixed />
       </Page>
     </Document>
   );
 }
 
-// ─── DIAGRAMA DE BLOCOS — CEEE ────────────────────────────────────────────────
-function DiagramaBlocosCEEEDoc({ data }: { data: ProjetoData }) {
+// ─── DIAGRAMA UNIFILAR — CEEE (SVG fiel ao referencial CEEE Equatorial) ────────
+function DiagramaUnifilarCEEEDoc({ data }: { data: ProjetoData }) {
   const potInst = fmtPower(data.sistemaFV.potenciaInstalada);
-  const potCA = fmtPower(data.sistemaFV.inversorPotencia * (parseInt(data.sistemaFV.quantidadeInversores) || 1));
-  const qtdInv = data.sistemaFV.quantidadeInversores || '1';
-  const qtdMod = data.sistemaFV.quantidadeModulos || '0';
-  const tensao = data.unidadeConsumidora.tensaoAtendimento || '—';
-  const fases = faseLabel[data.unidadeConsumidora.tipoConexao] || '—';
+  const qtdInv = parseInt(data.sistemaFV.quantidadeInversores) || 1;
+  const qtdMod = parseInt(data.sistemaFV.quantidadeModulos) || 0;
+  const potCA = fmtPower(data.sistemaFV.inversorPotencia * qtdInv);
+  const modDesc = `${data.sistemaFV.moduloFabricante} ${data.sistemaFV.moduloModelo} ${data.sistemaFV.moduloPotencia}W`;
+  const invFull = `${data.sistemaFV.inversorFabricante} ${data.sistemaFV.inversorModelo}`;
+  const tensaoNum = (data.unidadeConsumidora.tensaoAtendimento || '220V').replace('V', '').split('/')[0];
   const disjuntor = data.sistemaFV.disjuntorGeracao || '40 A';
-
-  // 5 blocos horizontais: GERAÇÃO → PROTEÇÃO CC → INVERSOR → PROTEÇÃO CA → MEDIÇÃO → REDE
-  const blocks = [
-    { title: 'GERAÇÃO', sub: `String CC · ${qtdMod} módulos`, det: `${potInst} kWp` },
-    { title: 'PROTEÇÃO CC', sub: `Fusível + DPS`, det: `${data.sistemaFV.dpsCC || '1000 V'}` },
-    { title: 'INVERSOR', sub: `${data.sistemaFV.inversorFabricante} ${data.sistemaFV.inversorModelo}`, det: `${potCA} kW · ${qtdInv}un` },
-    { title: 'PROTEÇÃO CA', sub: `Disjuntor + DPS`, det: `${disjuntor} · ${data.sistemaFV.dpsCA || '275 V'}` },
-    { title: 'MEDIÇÃO', sub: `Bidirecional`, det: `UC ${data.unidadeConsumidora.codigo}` },
-    { title: 'REDE', sub: `Distribuição CEEE`, det: `${tensao} · ${fases}` },
-  ];
+  const endStr = `${data.endereco.logradouro}, ${data.endereco.numero} - ${data.endereco.bairro}, ${data.endereco.cidade}/${data.endereco.uf}`;
+  const rtStr = `${data.engenheiro || '—'} - ${data.crea || '—'}`;
 
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={base.page}>
-        <Header accent={COLOR.ceee} eyebrow="CEEE Equatorial" title="Diagrama de Blocos" />
-        <Text style={base.docTitle}>Projeto de Microgeração Fotovoltaica</Text>
+      <Page size="A4" style={{ padding: 0, backgroundColor: '#fff' }}>
+        <Svg viewBox="0 0 800 1100" style={{ width: 595, height: 841 }}>
+          <Rect x="0" y="0" width="800" height="1100" fill="#f7f7f7"/>
+          <Rect x="39" y="38" width="722" height="1025" fill="none" stroke="#111" strokeWidth="2"/>
 
-        <View style={base.section}>
-          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>Identificação</Text>
-          <Field label="Cliente" value={data.cliente.nome} />
-          <Field label="Endereço" value={`${data.endereco.logradouro}, ${data.endereco.numero} · ${data.endereco.bairro} · ${data.endereco.cidade}/${data.endereco.uf}`} />
-          <Field label="UC (Número da Instalação)" value={data.unidadeConsumidora.codigo} mono />
-          <Field label="Conta Contrato (Parceiro de Negócio)" value={data.unidadeConsumidora.contaContrato} mono />
-          <Field label="Responsável Técnico" value={`${data.engenheiro || '—'} · CREA ${data.crea || '—'}`} />
-        </View>
+          {/* HEADER */}
+          <Line x1="39" y1="200" x2="761" y2="200" stroke="#111" strokeWidth="2"/>
+          <ST x="400" y="78" fontFamily="Helvetica-Bold" fontSize={26} textAnchor="middle" fill="#111">Diagrama Unifilar</ST>
+          <ST x="400" y="107" fontFamily="Helvetica-Bold" fontSize={16} textAnchor="middle" fill="#111">Projeto de Microgeração Fotovoltaica</ST>
+          <ST x="64" y="143" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Cliente: ' + data.cliente.nome}</ST>
+          <ST x="64" y="163" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Localização: ' + endStr}</ST>
+          <ST x="64" y="183" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Responsável técnico: ' + rtStr}</ST>
 
-        {/* Blocos horizontais */}
-        <View style={{ flexDirection: 'row', marginTop: 18, marginBottom: 8 }}>
-          {blocks.map((b, i) => (
-            <React.Fragment key={i}>
-              <View
-                style={{
-                  flex: 1,
-                  borderWidth: 1,
-                  borderColor: COLOR.ceee,
-                  borderRadius: 4,
-                  paddingVertical: 12,
-                  paddingHorizontal: 6,
-                  alignItems: 'center',
-                  backgroundColor: COLOR.ceeeSoft,
-                }}
-              >
-                <Text style={{ fontSize: 9, fontFamily: FONT.sansBold, color: COLOR.ceee, marginBottom: 4 }}>
-                  {b.title}
-                </Text>
-                <Text style={{ fontSize: 7.5, textAlign: 'center', color: COLOR.ink }}>{b.sub}</Text>
-                <Text style={{ fontSize: 7, textAlign: 'center', color: COLOR.muted, marginTop: 4 }}>{b.det}</Text>
-              </View>
-              {i < blocks.length - 1 && (
-                <View style={{ width: 18, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 14, color: COLOR.ceee }}>→</Text>
-                </View>
-              )}
-            </React.Fragment>
-          ))}
-        </View>
+          {/* ASSINATURAS */}
+          <Line x1="39" y1="966" x2="761" y2="966" stroke="#111" strokeWidth="2"/>
+          <ST x="400" y="989" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">Assinaturas:</ST>
+          <Line x1="70" y1="1030" x2="160" y2="1030" stroke="#111" strokeWidth="1.2"/>
+          <ST x="115" y="1022" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">{data.endereco.cidade}</ST>
+          <ST x="115" y="1048" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">Local</ST>
+          <Line x1="175" y1="1030" x2="260" y2="1030" stroke="#111" strokeWidth="1.2"/>
+          <ST x="217" y="1022" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">{today()}</ST>
+          <ST x="217" y="1048" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">Data</ST>
+          <Line x1="293" y1="1030" x2="464" y2="1030" stroke="#111" strokeWidth="1.2"/>
+          <ST x="378" y="1048" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">Responsável Técnico</ST>
+          <Line x1="540" y1="1030" x2="708" y2="1030" stroke="#111" strokeWidth="1.2"/>
+          <ST x="624" y="1048" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">Proprietário</ST>
 
-        <View style={[base.section, { marginTop: 18 }]}>
-          <Text style={[base.sectionTitle, { backgroundColor: COLOR.ceee }]}>Resumo Técnico</Text>
-          <Field label="Potência instalada (CC)" value={`${potInst} kWp`} />
-          <Field label="Potência nominal (CA)" value={`${potCA} kW`} />
-          <Field label="Tensão / Fases" value={`${tensao} · ${fases}`} />
-          <Field label="Módulos" value={`${qtdMod} × ${data.sistemaFV.moduloFabricante} ${data.sistemaFV.moduloModelo} (${data.sistemaFV.moduloPotencia} Wp)`} />
-          <Field label="Inversor(es)" value={`${qtdInv} × ${data.sistemaFV.inversorFabricante} ${data.sistemaFV.inversorModelo}`} />
-          <Field label="Proteção CC / CA" value={`DPS CC ${data.sistemaFV.dpsCC || '1000 V'} · DPS CA ${data.sistemaFV.dpsCA || '275 V'} · Disjuntor ${disjuntor}`} />
-        </View>
+          {/* REDE DE BAIXA TENSÃO */}
+          <ST x="214" y="224" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">REDE DE BAIXA TENSÃO</ST>
+          <Line x1="110" y1="232" x2="318" y2="232" stroke="#111" strokeWidth="2"/>
+          <Line x1="215" y1="232" x2="215" y2="886" stroke="#111" strokeWidth="2"/>
+          <ST x="228" y="259" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">PONTO DE ENTREGA</ST>
+          <Path d="M 225,257 L 231,250 L 234,260" stroke="#111" strokeWidth="1.2" fill="none"/>
+          <ST x="393" y="267" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">ACESSADA</ST>
+          <ST x="393" y="286" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">ACESSANTE</ST>
 
-        <Footer cidade={`${data.endereco.cidade} - ${data.endereco.uf}`} />
-        <Text style={base.pageNumber} render={({ pageNumber, totalPages }) => `Diagrama de Blocos · página ${pageNumber} de ${totalPages}`} fixed />
+          {/* PADRÃO DE ENTRADA */}
+          <Rect x="60" y="264" width="370" height="135" fill="none" stroke="#111" strokeWidth="1.5" strokeDasharray="7 6"/>
+          <ST x="320" y="300" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">PADRÃO DE ENTRADA</ST>
+          <ST x="320" y="316" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">(caixa de medição)</ST>
+          <ST x="72" y="308" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">Cabo CA 750V</ST>
+          <ST x="72" y="330" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'2 x 10,00 mm² + 10,00 mm²'}</ST>
+          <Rect x="232" y="327" width="82" height="42" fill="#6388ac" stroke="#111" strokeWidth="1.2"/>
+          <ST x="273" y="353" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">MEDIDOR</ST>
+          <Rect x="191" y="363" width="41" height="45" fill="#50779d" stroke="#111" strokeWidth="1.1"/>
+          <ST x="211" y="391" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D1</ST>
+          <ST x="238" y="390" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'2-50 A / ' + tensaoNum + ' Vca'}</ST>
+          <Line x1="420" y1="384" x2="445" y2="384" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="445" y1="384" x2="445" y2="372" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="438" y1="372" x2="452" y2="372" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="441" y1="378" x2="449" y2="378" stroke="#111" strokeWidth="1.2"/>
+
+          {/* QUADRO DE DISTRIBUIÇÃO */}
+          <Rect x="97" y="410" width="350" height="132" fill="none" stroke="#111" strokeWidth="1.5" strokeDasharray="7 6"/>
+          <ST x="316" y="427" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">QUADRO DE DISTRIBUIÇÃO</ST>
+          <ST x="316" y="444" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">{'2-50 A / ' + tensaoNum + ' Vca'}</ST>
+          <Rect x="190" y="415" width="42" height="43" fill="#50779d" stroke="#111" strokeWidth="1.1"/>
+          <ST x="211" y="442" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D2</ST>
+          <Line x1="120" y1="477" x2="318" y2="477" stroke="#111" strokeWidth="2"/>
+          <Line x1="120" y1="477" x2="120" y2="524" stroke="#111" strokeWidth="2"/>
+          <Line x1="172" y1="477" x2="172" y2="524" stroke="#111" strokeWidth="2"/>
+          <Line x1="224" y1="477" x2="224" y2="555" stroke="#111" strokeWidth="2"/>
+          <Rect x="105" y="490" width="34" height="34" fill="#557da4" stroke="#111" strokeWidth="1.1"/>
+          <Rect x="157" y="490" width="34" height="34" fill="#557da4" stroke="#111" strokeWidth="1.1"/>
+          <Rect x="209" y="490" width="34" height="34" fill="#557da4" stroke="#111" strokeWidth="1.1"/>
+          <ST x="122" y="513" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D</ST>
+          <ST x="174" y="513" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D</ST>
+          <ST x="226" y="513" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D</ST>
+          <ST x="166" y="556" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">CARGAS (kW)</ST>
+          <ST x="128" y="465" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">DPS CA</ST>
+          <Line x1="98" y1="464" x2="130" y2="464" stroke="#d11" strokeWidth="2.4"/>
+          <Line x1="110" y1="455" x2="118" y2="473" stroke="#d11" strokeWidth="2.4"/>
+          <Rect x="289" y="490" width="43" height="43" fill="#50779d" stroke="#111" strokeWidth="1.1"/>
+          <ST x="310" y="517" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D3</ST>
+          <ST x="345" y="477" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">Cabo CA 750V</ST>
+          <ST x="345" y="499" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'2 x 6,00 mm²'}</ST>
+          <ST x="343" y="522" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'2-' + disjuntor + ' / ' + tensaoNum + ' Vca'}</ST>
+          <ST x="343" y="538" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Cabo CA 750V (2 x 6,00 mm²)'}</ST>
+          <Line x1="430" y1="520" x2="456" y2="520" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="456" y1="520" x2="456" y2="507" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="448" y1="507" x2="463" y2="507" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="452" y1="513" x2="460" y2="513" stroke="#111" strokeWidth="1.2"/>
+
+          {/* QUADRO DE PROTEÇÃO CA */}
+          <Rect x="185" y="552" width="245" height="135" fill="none" stroke="#111" strokeWidth="1.5" strokeDasharray="7 6"/>
+          <ST x="332" y="575" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">QUADRO DE</ST>
+          <ST x="332" y="592" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">PROTEÇÃO CA</ST>
+          <Rect x="289" y="603" width="43" height="44" fill="#50779d" stroke="#111" strokeWidth="1.1"/>
+          <ST x="310" y="631" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">D4</ST>
+          <ST x="344" y="630" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'2-' + disjuntor + ' / ' + tensaoNum + ' Vca'}</ST>
+          <ST x="215" y="606" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">DPS CA</ST>
+          <ST x="203" y="624" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">{'175 Vca, In > 20kA'}</ST>
+          <ST x="218" y="642" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">Classe II</ST>
+          <Line x1="198" y1="615" x2="230" y2="615" stroke="#d11" strokeWidth="2.4"/>
+          <Line x1="211" y1="605" x2="217" y2="626" stroke="#d11" strokeWidth="2.4"/>
+
+          {/* INVERSOR */}
+          <ST x="62" y="674" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{invFull}</ST>
+          <ST x="130" y="696" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{potCA + ' kW'}</ST>
+          <ST x="109" y="718" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{tensaoNum + ' Vca'}</ST>
+          <ST x="109" y="740" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">550 Vcc</ST>
+          <Rect x="279" y="662" width="72" height="60" fill="#6388ac" stroke="#111" strokeWidth="1.2"/>
+          <ST x="315" y="650" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">INVERSOR</ST>
+          <Path d="M 294,699 Q 304,673 318,699 T 342,699" stroke="#fff" strokeWidth="3" fill="none"/>
+          <Line x1="295" y1="683" x2="336" y2="683" stroke="#fff" strokeWidth="3"/>
+          <Line x1="294" y1="690" x2="336" y2="690" stroke="#fff" strokeWidth="3"/>
+          <ST x="358" y="705" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Cabo CC 6 mm²'}</ST>
+          <ST x="386" y="727" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">1.000V</ST>
+          <Line x1="351" y1="684" x2="489" y2="684" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="351" y1="704" x2="489" y2="704" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="351" y1="724" x2="489" y2="724" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="351" y1="744" x2="489" y2="744" stroke="#111" strokeWidth="1.2"/>
+          <Circle cx="505" cy="676" r="16" fill="#fff" stroke="#111" strokeWidth="1.4"/>
+          <ST x="505" y="681" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">25</ST>
+          <Circle cx="505" cy="704" r="16" fill="#fff" stroke="#111" strokeWidth="1.4"/>
+          <ST x="505" y="709" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">27</ST>
+          <Circle cx="505" cy="733" r="16" fill="#fff" stroke="#111" strokeWidth="1.4"/>
+          <ST x="505" y="738" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">59</ST>
+          <Circle cx="505" cy="762" r="16" fill="#fff" stroke="#111" strokeWidth="1.4"/>
+          <ST x="505" y="759" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">81</ST>
+          <ST x="505" y="772" fontFamily="Helvetica-Bold" fontSize={7.2} textAnchor="middle" fill="#111">U/O</ST>
+          <Rect x="524" y="764" width="98" height="26" fill="#f0f0f0" stroke="#111" strokeWidth="1.4"/>
+          <ST x="573" y="781" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">ANTI-ILHAMENTO</ST>
+
+          {/* DPS CC */}
+          <Rect x="171" y="767" width="270" height="96" fill="none" stroke="#111" strokeWidth="1.5" strokeDasharray="7 6"/>
+          <ST x="296" y="785" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">DPS CC</ST>
+          <ST x="300" y="805" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">{'1000 Vcc, In = 18 kA'}</ST>
+          <ST x="300" y="823" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">{'Imáx = 40 kA'}</ST>
+          <ST x="300" y="841" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">Classe II</ST>
+          <Line x1="213" y1="836" x2="250" y2="836" stroke="#d11" strokeWidth="2.4"/>
+          <Line x1="226" y1="824" x2="234" y2="850" stroke="#d11" strokeWidth="2.4"/>
+          <ST x="227" y="864" fontFamily="Helvetica-Bold" fontSize={8.7} textAnchor="middle" fill="#111">DETALHE 1</ST>
+          <ST x="348" y="790" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">DESCRIÇÃO DE DPS</ST>
+          <ST x="348" y="807" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">ACOPLADO AO INVERSOR</ST>
+          <ST x="357" y="848" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Cabo CC 6 mm²'}</ST>
+          <ST x="386" y="869" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">1.000V</ST>
+
+          {/* GERADOR */}
+          <Rect x="279" y="875" width="71" height="45" fill="#6388ac" stroke="#111" strokeWidth="1.2"/>
+          <ST x="315" y="903" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#fff">G</ST>
+          <ST x="315" y="926" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">GERADOR</ST>
+          <Line x1="279" y1="916" x2="255" y2="916" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="255" y1="916" x2="255" y2="929" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="247" y1="929" x2="263" y2="929" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="250" y1="935" x2="260" y2="935" stroke="#111" strokeWidth="1.2"/>
+          <ST x="362" y="896" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Individual: ' + modDesc}</ST>
+          <ST x="362" y="917" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Quantidade: ' + qtdMod}</ST>
+          <ST x="362" y="938" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">{'Total: ' + potInst + ' kWp'}</ST>
+
+          {/* LEGENDA */}
+          <Rect x="478" y="228" width="250" height="330" fill="#fff" stroke="#111" strokeWidth="1.4"/>
+          <ST x="493" y="250" fontFamily="Helvetica-Bold" fontSize={10.5} fill="#111">LEGENDA:</ST>
+          <ST x="493" y="268" fontFamily="Helvetica" fontSize={8.7} fill="#111">D1: Disjuntor de entrada ou geral da</ST>
+          <ST x="493" y="282" fontFamily="Helvetica" fontSize={8.7} fill="#111">unidade consumidora</ST>
+          <ST x="493" y="300" fontFamily="Helvetica" fontSize={8.7} fill="#111">D2: Disjuntor geral ou principal do</ST>
+          <ST x="493" y="314" fontFamily="Helvetica" fontSize={8.7} fill="#111">quadro geral de distribuição</ST>
+          <ST x="493" y="332" fontFamily="Helvetica" fontSize={8.7} fill="#111">D3: Disjuntor da alimentação do</ST>
+          <ST x="493" y="346" fontFamily="Helvetica" fontSize={8.7} fill="#111">circuito do inversor</ST>
+          <ST x="493" y="364" fontFamily="Helvetica" fontSize={8.7} fill="#111">D4: Disjuntor de proteção do inversor</ST>
+          <ST x="493" y="382" fontFamily="Helvetica" fontSize={8.7} fill="#111">D: Disjuntor de proteção da carga</ST>
+          <ST x="493" y="400" fontFamily="Helvetica" fontSize={8.7} fill="#111">MEDIDOR: medidor bidirecional</ST>
+          <ST x="493" y="418" fontFamily="Helvetica" fontSize={8.7} fill="#111">G: Gerador fotovoltaico</ST>
+          <ST x="493" y="436" fontFamily="Helvetica" fontSize={8.7} fill="#111">25: Sincronismo</ST>
+          <ST x="493" y="454" fontFamily="Helvetica" fontSize={8.7} fill="#111">27: Subtensão</ST>
+          <ST x="493" y="472" fontFamily="Helvetica" fontSize={8.7} fill="#111">59: Sobretensão</ST>
+          <ST x="493" y="490" fontFamily="Helvetica" fontSize={8.7} fill="#111">81 U/O: Sub/sobrefrequência</ST>
+          <ST x="493" y="508" fontFamily="Helvetica" fontSize={8.7} fill="#111">NP: Número de pólos do disjuntor</ST>
+          <ST x="493" y="526" fontFamily="Helvetica" fontSize={8.7} fill="#111">YYY A: Corrente nominal</ST>
+
+          {/* DETALHE 1 */}
+          <ST x="653" y="600" fontFamily="Helvetica-Bold" fontSize={10.5} textAnchor="middle" fill="#111">DETALHE 1</ST>
+          <Line x1="590" y1="622" x2="697" y2="622" stroke="#23856a" strokeWidth="2"/>
+          <Line x1="590" y1="642" x2="697" y2="642" stroke="#d11" strokeWidth="2"/>
+          <Line x1="590" y1="662" x2="697" y2="662" stroke="#111" strokeWidth="1.2"/>
+          <ST x="705" y="626" fontFamily="Helvetica-Bold" fontSize={7.2} fill="#111">-</ST>
+          <ST x="705" y="646" fontFamily="Helvetica-Bold" fontSize={7.2} fill="#111">+</ST>
+          <Rect x="620" y="638" width="12" height="42" fill="#d11" stroke="#111" strokeWidth="1"/>
+          <Rect x="661" y="638" width="12" height="42" fill="#d11" stroke="#111" strokeWidth="1"/>
+          <Line x1="626" y1="622" x2="626" y2="638" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="667" y1="622" x2="667" y2="638" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="626" y1="680" x2="626" y2="708" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="667" y1="680" x2="667" y2="708" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="626" y1="708" x2="667" y2="708" stroke="#111" strokeWidth="2"/>
+          <Line x1="647" y1="708" x2="647" y2="729" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="639" y1="729" x2="655" y2="729" stroke="#111" strokeWidth="1.2"/>
+          <Line x1="642" y1="735" x2="652" y2="735" stroke="#111" strokeWidth="1.2"/>
+          <ST x="606" y="668" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">1</ST>
+          <ST x="690" y="668" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">2</ST>
+          <ST x="651" y="696" fontFamily="Helvetica-Bold" fontSize={8.7} fill="#111">3</ST>
+        </Svg>
       </Page>
     </Document>
   );
+}
+
+// Legacy wrapper — mesmo nome, agora gera Diagrama de Blocos SVG
+function DiagramaUnifilarRGEDoc({ data }: { data: ProjetoData }) {
+  return <DiagramaBlocosDoc data={data} />;
+}
+
+// Legacy wrapper — CEEE Diagrama de Blocos
+function DiagramaBlocosCEEEDoc({ data }: { data: ProjetoData }) {
+  return <DiagramaBlocosDoc data={data} />;
 }
 
 // ─── Memorial Descritivo — CEEE ───────────────────────────────────────────────
@@ -797,6 +933,9 @@ export async function gerarDiagramaUnifilarRGE(data: ProjetoData): Promise<Uint8
 }
 export async function gerarDiagramaBlocosCEEE(data: ProjetoData): Promise<Uint8Array> {
   return render(<DiagramaBlocosCEEEDoc data={data} />);
+}
+export async function gerarDiagramaUnifilarCEEE(data: ProjetoData): Promise<Uint8Array> {
+  return render(<DiagramaUnifilarCEEEDoc data={data} />);
 }
 export async function gerarMemorialCEEE(data: ProjetoData): Promise<Uint8Array> {
   return render(<MemorialCEEEDoc data={data} />);

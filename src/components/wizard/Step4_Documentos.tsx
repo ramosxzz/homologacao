@@ -11,6 +11,7 @@ import {
   gerarAnexoFRGE,
   gerarDiagramaUnifilarRGE,
   gerarDiagramaBlocosCEEE,
+  gerarDiagramaUnifilarCEEE,
   gerarMemorialCEEE,
   gerarAnexoICEEE,
   downloadPdf,
@@ -31,7 +32,7 @@ import {
   Info,
 } from 'lucide-react';
 
-type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_memorial' | 'ceee_anexo_i';
+type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_unifilar' | 'ceee_memorial' | 'ceee_anexo_i';
 type PrintableDocId = Exclude<DocId, 'ceee_anexo_i' | 'ceee_memorial'>;
 type _Unused = PrintableDocId;
 
@@ -75,11 +76,11 @@ export default function Step4_Documentos() {
     },
     {
       id: 'rge_anexo_f',
-      title: 'Dados para Registro de Micro/Minigeradores',
-      desc: 'Anexo F — RGE/CPFL · Registro de central geradora na ANEEL (7 páginas)',
+      title: 'Lista de Materiais / Ordem de Serviço',
+      desc: 'Anexo F — RGE/CPFL · Planilha editável (.xlsx) — preencha após o download',
       badge: 'Anexo F',
-      tipo: 'pdf',
-      previewPath: '/documentos/rge/anexo-f.pdf',
+      tipo: 'xlsx',
+      previewPath: '/documentos/rge/anexo-f.xlsx',
     },
     {
       id: 'rge_diagrama',
@@ -99,6 +100,14 @@ export default function Step4_Documentos() {
       badge: 'Elétrico',
       tipo: 'pdf',
       previewPath: '/documentos/ceee/diagrama-blocos.pdf',
+    },
+    {
+      id: 'ceee_unifilar',
+      title: 'Diagrama Unifilar',
+      desc: 'CEEE Equatorial · Diagrama elétrico unifilar detalhado do projeto',
+      badge: 'Unifilar',
+      tipo: 'pdf',
+      previewPath: '/documentos/ceee/diagrama-unifilar.pdf',
     },
     {
       id: 'ceee_memorial',
@@ -139,7 +148,8 @@ export default function Step4_Documentos() {
       case 'rge_anexo_e':   return gerarAnexoERGE(p);
       case 'rge_anexo_f':   return gerarAnexoFRGE(p);
       case 'rge_diagrama':  return gerarDiagramaUnifilarRGE(p);
-      case 'ceee_diagrama': return gerarDiagramaBlocosCEEE(p);
+      case 'ceee_diagrama':  return gerarDiagramaBlocosCEEE(p);
+      case 'ceee_unifilar': return gerarDiagramaUnifilarCEEE(p);
       case 'ceee_memorial': return gerarMemorialCEEE(p);
       case 'ceee_anexo_i':  return gerarAnexoICEEE(p);
       default: throw new Error('Documento sem gerador PDF');
@@ -150,9 +160,10 @@ export default function Step4_Documentos() {
     const nc = cliente.nome.replace(/\s+/g, '_').toUpperCase() || 'CLIENTE';
     switch (docId) {
       case 'rge_anexo_e':   return `Anexo_E_RGE_${nc}.pdf`;
-      case 'rge_anexo_f':   return `Anexo_F_RGE_${nc}.pdf`;
-      case 'rge_diagrama':  return `Diagrama_Unifilar_RGE_${nc}.pdf`;
-      case 'ceee_diagrama': return `Diagrama_Blocos_CEEE_${nc}.pdf`;
+      case 'rge_anexo_f':   return `Anexo_F_RGE_${nc}.xlsx`;
+      case 'rge_diagrama':  return `Diagrama_Blocos_RGE_${nc}.pdf`;
+      case 'ceee_diagrama':  return `Diagrama_Blocos_CEEE_${nc}.pdf`;
+      case 'ceee_unifilar': return `Diagrama_Unifilar_CEEE_${nc}.pdf`;
       case 'ceee_memorial': return `Memorial_Descritivo_CEEE_${nc}.pdf`;
       case 'ceee_anexo_i':  return `Anexo_I_CEEE_${nc}.pdf`;
       default:              return 'documento.pdf';
@@ -166,18 +177,33 @@ export default function Step4_Documentos() {
   const handleDownload = async (doc: DocItem) => {
     setLoadingDoc(doc.id);
     try {
-      const bytes = await generatePdf(doc.id);
-      downloadPdf(bytes, getFilename(doc.id));
+      if (doc.tipo === 'xlsx') {
+        const res = await fetch(doc.previewPath);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = getFilename(doc.id);
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const bytes = await generatePdf(doc.id);
+        downloadPdf(bytes, getFilename(doc.id));
+      }
     } catch (e: unknown) {
-      console.error('Erro ao gerar PDF:', e);
-      alert(`Erro ao gerar PDF: ${e instanceof Error ? e.message : 'erro desconhecido'}`);
+      console.error('Erro ao baixar documento:', e);
+      alert(`Erro ao baixar: ${e instanceof Error ? e.message : 'erro desconhecido'}`);
     } finally {
       setLoadingDoc(null);
     }
   };
 
   const handlePrint = async (doc: DocItem) => {
-    // Imprime via janela do navegador: abre o PDF gerado em nova aba
+    if (doc.tipo === 'xlsx') {
+      // xlsx: abre diretamente no navegador
+      window.open(doc.previewPath, '_blank');
+      return;
+    }
     setLoadingDoc(doc.id);
     try {
       const bytes = await generatePdf(doc.id);
@@ -185,7 +211,7 @@ export default function Step4_Documentos() {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     } catch (e: unknown) {
-      console.error('Erro ao imprimir:', e);
+      console.error('Erro ao abrir PDF:', e);
     } finally {
       setLoadingDoc(null);
     }
@@ -195,11 +221,10 @@ export default function Step4_Documentos() {
     for (const doc of activeDocs) {
       setLoadingDoc(doc.id);
       try {
-        const bytes = await generatePdf(doc.id);
-        downloadPdf(bytes, getFilename(doc.id));
+        await handleDownload(doc);
         await new Promise(r => setTimeout(r, 600));
       } catch (e) {
-        console.error(`Erro ao gerar ${doc.id}:`, e);
+        console.error(`Erro ao baixar ${doc.id}:`, e);
       }
     }
     setLoadingDoc(null);
@@ -343,7 +368,9 @@ export default function Step4_Documentos() {
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className={`flex-shrink-0 w-11 h-11 rounded-lg border flex items-center justify-center ${distColor.iconBg}`}>
-                    <FileText size={20} className={distColor.icon} />
+                    {doc.tipo === 'xlsx'
+                      ? <FileSpreadsheet size={20} className="text-emerald-400" />
+                      : <FileText size={20} className={distColor.icon} />}
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-sm font-bold text-slate-200 leading-snug">{doc.title}</h4>
