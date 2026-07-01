@@ -5,7 +5,7 @@
  * como no template original para preenchimento manual pelo responsável técnico.
  */
 import type { ProjetoData } from './pdfGenerator';
-import { fillDocx, fillXlsx, type XlsxEdits, type XlsxImage } from './docFiller';
+import { fillDocx, fillXlsx, type XlsxEdits, type XlsxImage, type DocxImage } from './docFiller';
 
 function hoje(): string {
   return new Date().toLocaleDateString('pt-BR');
@@ -82,7 +82,16 @@ export function fillMemorial(d: ProjetoData): Promise<Blob> {
   const exact: Record<string, string> = {
     'Classe:': `Classe: ${d.unidadeConsumidora.classe || ''}`,
   };
-  return fillDocx('/documentos/ceee/memorial.docx', repl, exact);
+  // Planta de situação: satélite do telhado na caixa placeholder.
+  const images: DocxImage[] = [];
+  if (d.localizacao.telhadoImagem) {
+    images.push({
+      token: 'INSERIR NESTA CAIXA DE TEXTO',
+      dataUrl: d.localizacao.telhadoImagem,
+      widthCm: 11, heightCm: 11,
+    });
+  }
+  return fillDocx('/documentos/ceee/memorial.docx', repl, exact, images);
 }
 
 // ─── ANEXO F — RGE (xlsx, aba "Input") ────────────────────────────────────────

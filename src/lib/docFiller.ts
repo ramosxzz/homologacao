@@ -50,6 +50,12 @@ export async function fillDocx(
    * rótulos curtos e ambíguos (ex.: "Classe:") que não podem usar substring.
    */
   exactParas: Record<string, string> = {},
+  /**
+   * Imagens inline: quando o texto (achatado) do parágrafo contém `token`,
+   * o parágrafo passa a conter a imagem (data URL) no tamanho indicado.
+   * Usado para a "planta de situação" do Memorial (satélite do telhado).
+   */
+  images: DocxImage[] = [],
 ): Promise<Blob> {
   const buf = await fetchTemplate(templatePath);
   const zip = new PizZip(buf);
@@ -57,12 +63,25 @@ export async function fillDocx(
   if (!docFile) throw new Error('document.xml não encontrado no DOCX');
   let xml = docFile.asText();
 
+  // Registra imagens (media + rels + content types) e monta o mapa token→drawing
+  const drawings = images.length ? registerDocxImages(zip, images) : [];
+
   const tokens = Object.keys(replacements);
 
   xml = xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, (para) => {
     const texts = [...para.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]);
     if (texts.length === 0) return para;
     let full = xmlDecode(texts.join(''));
+
+    const pPrMatch = para.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
+    const pStart = (para.match(/^<w:p\b[^>]*>/) || ['<w:p>'])[0];
+
+    // Imagem: substitui todo o corpo do parágrafo pelo drawing
+    for (const dr of drawings) {
+      if (full.includes(dr.token)) {
+        return `${pStart}${pPrMatch ? pPrMatch[0] : ''}<w:r>${dr.xml}</w:r></w:p>`;
+      }
+    }
 
     let hit = false;
     const exact = exactParas[full.trim()];
@@ -78,10 +97,8 @@ export async function fillDocx(
     }
     if (!hit) return para;
 
-    const pPrMatch = para.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
     const firstRun = para.match(/<w:r\b[^>]*>([\s\S]*?)<\/w:r>/);
     const rPr = firstRun ? (firstRun[1].match(/<w:rPr>[\s\S]*?<\/w:rPr>/) || [''])[0] : '';
-    const pStart = (para.match(/^<w:p\b[^>]*>/) || ['<w:p>'])[0];
 
     return (
       `${pStart}${pPrMatch ? pPrMatch[0] : ''}` +
@@ -92,6 +109,78 @@ export async function fillDocx(
   zip.file('word/document.xml', xml);
   const out = zip.generate({ type: 'arraybuffer', compression: 'DEFLATE' });
   return new Blob([out], { type: MIME_DOCX });
+}
+
+/** Imagem inline no DOCX: token a localizar + data URL + tamanho em cm. */
+export type DocxImage = { token: string; dataUrl: string; widthCm: number; heightCm: number };
+
+const EMU_PER_CM = 360000;
+
+/** Adiciona media/rels/content-types e retorna o XML do drawing por token. */
+function registerDocxImages(
+  zip: PizZip,
+  images: DocxImage[],
+): Array<{ token: string; xml: string }> {
+  // 1) [Content_Types].xml — garante defaults png/jpeg
+  const ctPath = '[Content_Types].xml';
+  let ct = zip.file(ctPath)?.asText() || '';
+  const ensureDefault = (ext: string, mime: string) => {
+    if (!new RegExp(`Extension="${ext}"`).test(ct)) {
+      ct = ct.replace('</Types>', `<Default Extension="${ext}" ContentType="${mime}"/></Types>`);
+    }
+  };
+  ensureDefault('png', 'image/png');
+  ensureDefault('jpeg', 'image/jpeg');
+  ensureDefault('jpg', 'image/jpeg');
+  zip.file(ctPath, ct);
+
+  // 2) rels
+  const relsPath = 'word/_rels/document.xml.rels';
+  let rels = zip.file(relsPath)?.asText() || '';
+  const usedIds = [...rels.matchAll(/Id="rId(\d+)"/g)].map((m) => parseInt(m[1]));
+  let nextId = (usedIds.length ? Math.max(...usedIds) : 0) + 1;
+
+  const out: Array<{ token: string; xml: string }> = [];
+  let mediaN = 900;
+
+  for (const img of images) {
+    const { buffer, ext } = dataUrlToBuffer(img.dataUrl);
+    const fileExt = ext === 'jpeg' ? 'jpeg' : ext;
+    const mediaName = `imgGen${mediaN++}.${fileExt}`;
+    zip.file(`word/media/${mediaName}`, buffer);
+
+    const rId = `rId${nextId++}`;
+    rels = rels.replace(
+      '</Relationships>',
+      `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/></Relationships>`,
+    );
+
+    const cx = Math.round(img.widthCm * EMU_PER_CM);
+    const cy = Math.round(img.heightCm * EMU_PER_CM);
+    const docId = nextId + 1000;
+    out.push({ token: img.token, xml: drawingXml(rId, docId, cx, cy) });
+  }
+
+  zip.file(relsPath, rels);
+  return out;
+}
+
+function drawingXml(rId: string, id: number, cx: number, cy: number): string {
+  return (
+    `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/>` +
+    `<wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+    `<wp:docPr id="${id}" name="Imagem${id}"/>` +
+    `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+    `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+    `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:nvPicPr><pic:cNvPr id="${id}" name="Imagem${id}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`
+  );
 }
 
 /** Edições por aba: { 'NomeAba': { 'C5': valor, ... } } */
