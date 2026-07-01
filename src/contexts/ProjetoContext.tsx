@@ -17,6 +17,13 @@ export interface BeneficiarioState {
   percentual: string;
 }
 
+/** Item do levantamento de carga (Memorial — Tabela 1) */
+export interface CargaState {
+  descricao: string;
+  potenciaW: string;
+  quantidade: string;
+}
+
 export interface ProjetoState {
   currentStep: number; // 0-3
   distribuidora: Distribuidora;
@@ -84,6 +91,7 @@ export interface ProjetoState {
     modalidade: string;
     beneficiarios: BeneficiarioState[];
   };
+  cargas: CargaState[];
 }
 
 const initialState: ProjetoState = {
@@ -151,6 +159,7 @@ const initialState: ProjetoState = {
     modalidade: 'geracao_local',
     beneficiarios: [],
   },
+  cargas: [],
 };
 
 type Action =
@@ -162,6 +171,7 @@ type Action =
   | { type: 'UPDATE_LOCALIZACAO'; payload: Partial<ProjetoState['localizacao']> }
   | { type: 'UPDATE_SISTEMA_FV'; payload: Partial<ProjetoState['sistemaFV']> }
   | { type: 'UPDATE_COMPENSACAO'; payload: Partial<ProjetoState['compensacao']> }
+  | { type: 'UPDATE_CARGAS'; payload: CargaState[] }
   | { type: 'LOAD_PROJETO'; payload: ProjetoState }
   | { type: 'RESET' };
 
@@ -190,8 +200,10 @@ function projetoReducer(state: ProjetoState, action: Action): ProjetoState {
     }
     case 'UPDATE_COMPENSACAO':
       return { ...state, compensacao: { ...state.compensacao, ...action.payload } };
+    case 'UPDATE_CARGAS':
+      return { ...state, cargas: action.payload };
     case 'LOAD_PROJETO':
-      return action.payload;
+      return { ...action.payload, cargas: action.payload.cargas || [] };
     case 'RESET':
       return initialState;
     default:

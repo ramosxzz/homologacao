@@ -135,6 +135,7 @@ export default function Step4_Documentos() {
     endereco,
     localizacao,
     sistemaFV,
+    cargas: state.cargas,
     engenheiro,
     crea,
   });

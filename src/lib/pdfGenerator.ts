@@ -71,6 +71,7 @@ export interface ProjetoData {
     dpsCC: string;
     dpsCA: string;
   };
+  cargas?: { descricao: string; potenciaW: string; quantidade: string }[];
   engenheiro?: string;
   crea?: string;
 }

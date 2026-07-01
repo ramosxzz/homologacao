@@ -20,7 +20,18 @@ import {
 
 export default function Step3_DadosTecnicos() {
   const { state, dispatch } = useProjeto();
-  const { sistemaFV, compensacao } = state;
+  const { sistemaFV, compensacao, cargas } = state;
+
+  const setCargas = (list: typeof cargas) => dispatch({ type: 'UPDATE_CARGAS', payload: list });
+  const handleAddCarga = () => setCargas([...cargas, { descricao: '', potenciaW: '', quantidade: '1' }]);
+  const handleUpdateCarga = (i: number, field: 'descricao' | 'potenciaW' | 'quantidade', value: string) =>
+    setCargas(cargas.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
+  const handleRemoveCarga = (i: number) => setCargas(cargas.filter((_, idx) => idx !== i));
+  const cargaTotalKw = cargas.reduce((s, c) => {
+    const p = parseFloat((c.potenciaW || '0').replace(',', '.')) || 0;
+    const q = parseFloat((c.quantidade || '0').replace(',', '.')) || 0;
+    return s + (p * q) / 1000;
+  }, 0);
 
   const [moduloFabricantes, setModuloFabricantes] = useState<string[]>([]);
   const [inversorFabricantes, setInversorFabricantes] = useState<string[]>([]);
@@ -712,6 +723,74 @@ export default function Step3_DadosTecnicos() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* LEVANTAMENTO DE CARGA */}
+      <div className="wizard-section mt-8">
+        <h3 className="wizard-section-title">Levantamento de Carga</h3>
+        <p className="wizard-section-description mb-6">
+          Relação das cargas da unidade consumidora. Preenche a Tabela 1 do Memorial Descritivo (CEEE). Opcional — deixe em branco se não aplicável.
+        </p>
+
+        <div className="flex flex-col gap-3">
+          {cargas.map((c, i) => (
+            <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_130px_90px_auto] gap-3 items-end">
+              <div className="form-group mb-0">
+                {i === 0 && <label className="form-label">Descrição</label>}
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Ex.: Iluminação, Chuveiro..."
+                  value={c.descricao}
+                  onChange={(e) => handleUpdateCarga(i, 'descricao', e.target.value)}
+                />
+              </div>
+              <div className="form-group mb-0">
+                {i === 0 && <label className="form-label">Potência (W)</label>}
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="W"
+                  value={c.potenciaW}
+                  onChange={(e) => handleUpdateCarga(i, 'potenciaW', e.target.value)}
+                />
+              </div>
+              <div className="form-group mb-0">
+                {i === 0 && <label className="form-label">Qtd</label>}
+                <input
+                  type="number"
+                  className="form-input"
+                  value={c.quantidade}
+                  onChange={(e) => handleUpdateCarga(i, 'quantidade', e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveCarga(i)}
+                className="btn btn-secondary text-xs flex items-center gap-1 h-[42px]"
+                aria-label="Remover carga"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between mt-1">
+            <button
+              type="button"
+              onClick={handleAddCarga}
+              className="btn btn-secondary text-xs flex items-center gap-1 self-start"
+            >
+              <Plus size={14} />
+              Adicionar Carga
+            </button>
+            {cargas.length > 0 && (
+              <span className="text-xs text-slate-400">
+                Carga instalada total: <strong className="text-slate-200">{cargaTotalKw.toFixed(2).replace('.', ',')} kW</strong>
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

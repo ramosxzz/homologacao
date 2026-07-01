@@ -56,6 +56,8 @@ export async function fillDocx(
    * Usado para a "planta de situação" do Memorial (satélite do telhado).
    */
   images: DocxImage[] = [],
+  /** Preenchimento de tabelas (ex.: Levantamento de Carga do Memorial). */
+  tables: DocxTableFill[] = [],
 ): Promise<Blob> {
   const buf = await fetchTemplate(templatePath);
   const zip = new PizZip(buf);
@@ -106,6 +108,8 @@ export async function fillDocx(
     );
   });
 
+  if (tables.length) xml = applyDocxTables(xml, tables);
+
   zip.file('word/document.xml', xml);
   const out = zip.generate({ type: 'arraybuffer', compression: 'DEFLATE' });
   return new Blob([out], { type: MIME_DOCX });
@@ -113,6 +117,57 @@ export async function fillDocx(
 
 /** Imagem inline no DOCX: token a localizar + data URL + tamanho em cm. */
 export type DocxImage = { token: string; dataUrl: string; widthCm: number; heightCm: number };
+
+/**
+ * Preenchimento posicional de tabela DOCX.
+ * `headerIncludes`: trechos que devem existir no texto da tabela alvo.
+ * `rows`: cada item mapeia índice-de-coluna → valor, aplicado às linhas de
+ * dados na ordem (linhas cujo texto da 1ª célula é numérico).
+ */
+export type DocxTableFill = { headerIncludes: string[]; rows: Record<number, string>[] };
+
+function cellText(tc: string): string {
+  return xmlDecode([...tc.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join(''));
+}
+
+/** Injeta um run com `value` no primeiro parágrafo de uma célula vazia. */
+function setCellValue(tc: string, value: string): string {
+  const run = `<w:r><w:t xml:space="preserve">${xmlEncode(value)}</w:t></w:r>`;
+  // insere antes do primeiro </w:p> (preserva pPr existente)
+  const idx = tc.indexOf('</w:p>');
+  if (idx === -1) return tc;
+  return tc.slice(0, idx) + run + tc.slice(idx);
+}
+
+function applyDocxTables(xml: string, fills: DocxTableFill[]): string {
+  return xml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+    const tblText = [...tbl.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)].map((m) => m[1]).join('');
+    const fill = fills.find((f) => f.headerIncludes.every((h) => tblText.includes(h)));
+    if (!fill) return tbl;
+
+    let dataRow = -1;
+    return tbl.replace(/<w:tr\b[^>]*>[\s\S]*?<\/w:tr>/g, (tr) => {
+      const cells = [...tr.matchAll(/<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g)].map((m) => m[0]);
+      if (cells.length === 0) return tr;
+      const first = cellText(cells[0]).trim();
+      // linha de dados = primeira célula é um número (ITEM 1,2,3...)
+      if (!/^\d+$/.test(first)) return tr;
+      dataRow++;
+      const rowData = fill.rows[dataRow];
+      if (!rowData) return tr;
+
+      const newCells = cells.map((tc, ci) =>
+        rowData[ci] !== undefined && rowData[ci] !== '' ? setCellValue(tc, rowData[ci]) : tc,
+      );
+      // reconstrói a linha preservando o que vem antes/depois das células
+      let out = tr;
+      cells.forEach((orig, ci) => {
+        if (newCells[ci] !== orig) out = out.replace(orig, newCells[ci]);
+      });
+      return out;
+    });
+  });
+}
 
 const EMU_PER_CM = 360000;
 

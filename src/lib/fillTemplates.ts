@@ -5,7 +5,7 @@
  * como no template original para preenchimento manual pelo responsável técnico.
  */
 import type { ProjetoData } from './pdfGenerator';
-import { fillDocx, fillXlsx, type XlsxEdits, type XlsxImage, type DocxImage } from './docFiller';
+import { fillDocx, fillXlsx, type XlsxEdits, type XlsxImage, type DocxImage, type DocxTableFill } from './docFiller';
 
 function hoje(): string {
   return new Date().toLocaleDateString('pt-BR');
@@ -91,7 +91,30 @@ export function fillMemorial(d: ProjetoData): Promise<Blob> {
       widthCm: 11, heightCm: 11,
     });
   }
-  return fillDocx('/documentos/ceee/memorial.docx', repl, exact, images);
+  // Levantamento de carga (Tabela 1). FP e FD assumidos = 1 (padrão residencial).
+  const tables: DocxTableFill[] = [];
+  const cargas = (d.cargas || []).filter((c) => c.descricao.trim());
+  if (cargas.length) {
+    const rows = cargas.map((c) => {
+      const p = parseFloat((c.potenciaW || '0').replace(',', '.')) || 0;
+      const q = parseFloat((c.quantidade || '0').replace(',', '.')) || 0;
+      const ci = (p * q) / 1000; // CI (kW) = (A*B)/1000
+      const ciStr = ci.toFixed(2).replace('.', ',');
+      return {
+        1: c.descricao,
+        2: String(p).replace('.', ','),
+        3: String(q).replace('.', ','),
+        4: ciStr,   // CI (kW)
+        5: '1',     // FP
+        6: ciStr,   // CI (kVA) = C/D
+        7: '1',     // FD
+        8: ciStr,   // D(kW) = CxF
+        9: ciStr,   // D(kVA) = ExF
+      } as Record<number, string>;
+    });
+    tables.push({ headerIncludes: ['DESCRIÇÃO', 'A*B'], rows });
+  }
+  return fillDocx('/documentos/ceee/memorial.docx', repl, exact, images, tables);
 }
 
 // ─── ANEXO F — RGE (xlsx, aba "Input") ────────────────────────────────────────
