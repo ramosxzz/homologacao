@@ -18,7 +18,15 @@ export async function capturarImagem(
   zoom = 20,
 ): Promise<string> {
   const res = await fetch(mapshotUrl(type, lat, lng, zoom));
-  if (!res.ok) throw new Error(`Falha ao capturar imagem (${res.status})`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    if (res.status === 502 || /not activated|not enabled/i.test(txt)) {
+      throw new Error(
+        'Habilite a "Maps Static API" e a "Street View Static API" no Google Cloud Console para este projeto.',
+      );
+    }
+    throw new Error(`Falha ao capturar imagem (${res.status}). ${txt}`.trim());
+  }
   const blob = await res.blob();
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
