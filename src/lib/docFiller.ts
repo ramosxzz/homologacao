@@ -44,6 +44,12 @@ function xmlDecode(s: string): string {
 export async function fillDocx(
   templatePath: string,
   replacements: Record<string, string>,
+  /**
+   * Substituições por parágrafo exato: quando o texto do parágrafo (após trim)
+   * for exatamente igual à chave, todo o parágrafo vira o valor. Útil para
+   * rótulos curtos e ambíguos (ex.: "Classe:") que não podem usar substring.
+   */
+  exactParas: Record<string, string> = {},
 ): Promise<Blob> {
   const buf = await fetchTemplate(templatePath);
   const zip = new PizZip(buf);
@@ -59,6 +65,11 @@ export async function fillDocx(
     let full = xmlDecode(texts.join(''));
 
     let hit = false;
+    const exact = exactParas[full.trim()];
+    if (exact !== undefined) {
+      full = exact;
+      hit = true;
+    }
     for (const t of tokens) {
       if (full.includes(t)) {
         full = full.split(t).join(replacements[t]);
@@ -95,6 +106,11 @@ export async function fillXlsx(templatePath: string, edits: XlsxEdits): Promise<
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
 
+  // Força recálculo ao abrir: abas oficiais puxam do "Input" via fórmula e o
+  // ExcelJS mantém o resultado cacheado. Sem isto, o Excel/LibreOffice mostra
+  // os valores antigos do template.
+  wb.calcProperties.fullCalcOnLoad = true;
+
   for (const [sheetName, cells] of Object.entries(edits)) {
     const ws = wb.getWorksheet(sheetName);
     if (!ws) continue;
@@ -108,7 +124,22 @@ export async function fillXlsx(templatePath: string, edits: XlsxEdits): Promise<
   }
 
   const out = await wb.xlsx.writeBuffer();
-  return new Blob([out], { type: MIME_XLSX });
+
+  // Remove os resultados cacheados das fórmulas para forçar recálculo ao abrir.
+  // As abas oficiais puxam do "Input" via fórmula; sem isto, Excel/LibreOffice
+  // exibiriam os valores antigos do template (fullCalcOnLoad é ignorado por
+  // alguns leitores). Célula sem <v> obriga o app a computar.
+  const zip = new PizZip(out);
+  for (const name of Object.keys(zip.files)) {
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) continue;
+    let sx = zip.file(name)!.asText();
+    sx = sx
+      .replace(/<\/f><v>[\s\S]*?<\/v>/g, '</f>')
+      .replace(/(<f\b[^>]*\/>)<v>[\s\S]*?<\/v>/g, '$1');
+    zip.file(name, sx);
+  }
+  const finalBuf = zip.generate({ type: 'arraybuffer', compression: 'DEFLATE' });
+  return new Blob([finalBuf], { type: MIME_XLSX });
 }
 
 /** Dispara o download de um Blob no navegador. */

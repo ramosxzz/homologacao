@@ -27,7 +27,10 @@ const UF_NOMES: Record<string, string> = {
 export function fillAnexoE(d: ProjetoData): Promise<Blob> {
   const pot = `${fmtPot(d.sistemaFV.potenciaInstalada)} kW`;
   const tensao = d.unidadeConsumidora.tensaoAtendimento || '220 V';
+  const contato = [d.cliente.celular || d.cliente.telefone, d.cliente.email]
+    .filter(Boolean).join(' / ');
   const repl: Record<string, string> = {
+    // Dados técnicos
     '3095008465': d.unidadeConsumidora.codigo || '3095008465',
     'GOODWE': (d.sistemaFV.inversorFabricante || 'GOODWE').toUpperCase(),
     'GW5K-DNS-G40': d.sistemaFV.inversorModelo || 'GW5K-DNS-G40',
@@ -36,6 +39,11 @@ export function fillAnexoE(d: ProjetoData): Promise<Blob> {
     '5 kW (Valor de potência instalada total de geração, em kW)':
       `${pot} (Valor de potência instalada total de geração, em kW)`,
     'Potência nominal de conexão à rede: 5 kW': `Potência nominal de conexão à rede: ${pot}`,
+    // Identificação do solicitante (seção 5) + local/data
+    'MANDRIFER USINAGEM DE PECAS LTDA': d.cliente.nome || 'MANDRIFER USINAGEM DE PECAS LTDA',
+    '+55 51 99983-8492 / mandrifer@hotmail.com': contato || '+55 51 99983-8492 / mandrifer@hotmail.com',
+    'Novo Hamburgo': d.endereco.cidade || 'Novo Hamburgo',
+    '25/05/2026': hoje(),
   };
   return fillDocx('/documentos/rge/anexo-e.docx', repl);
 }
@@ -63,8 +71,18 @@ export function fillMemorial(d: ProjetoData): Promise<Blob> {
     '[NOME DA CONCESSIONÁRIA]': 'CEEE Equatorial',
     '[NOME DO ESTADO]': UF_NOMES[d.endereco.uf] || d.endereco.uf,
     'CIDADE – UF MÊS – ANO': `${cidadeUf} ${mesAno}`,
+    // Seção DADOS DA UNIDADE CONSUMIDORA (rótulos com valor em branco)
+    'Número da Conta Contrato:': `Número da Conta Contrato: ${d.unidadeConsumidora.contaContrato || ''}`,
+    'Nome do Titular da CC:': `Nome do Titular da CC: ${d.cliente.nome || ''}`,
+    'Endereço Completo:': `Endereço Completo: ${enderecoLinha(d)}`,
+    'Coordenadas georrefenciadas (em UTM ou Graus decimais):':
+      `Coordenadas georrefenciadas (em UTM ou Graus decimais): ${d.localizacao.latitude}, ${d.localizacao.longitude}`,
   };
-  return fillDocx('/documentos/ceee/memorial.docx', repl);
+  // "Classe:" é rótulo ambíguo (aparece 2x) — substitui só o parágrafo exato.
+  const exact: Record<string, string> = {
+    'Classe:': `Classe: ${d.unidadeConsumidora.classe || ''}`,
+  };
+  return fillDocx('/documentos/ceee/memorial.docx', repl, exact);
 }
 
 // ─── ANEXO F — RGE (xlsx, aba "Input") ────────────────────────────────────────
