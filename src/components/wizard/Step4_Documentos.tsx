@@ -7,15 +7,13 @@ import { shouldUseSupabaseData } from '@/lib/supabase';
 import { insertProjeto } from '@/lib/supabaseData';
 import { useRouter } from 'next/navigation';
 import {
-  gerarAnexoERGE,
-  gerarAnexoFRGE,
   gerarDiagramaUnifilarRGE,
   gerarDiagramaBlocosCEEE,
   gerarDiagramaUnifilarCEEE,
-  gerarMemorialCEEE,
-  gerarAnexoICEEE,
   downloadPdf,
 } from '@/lib/pdfRenderer';
+import { fillAnexoE, fillAnexoF, fillMemorial, fillAnexoI } from '@/lib/fillTemplates';
+import { downloadBlob } from '@/lib/docFiller';
 import { openDocumentForPrint } from '@/lib/docPrint';
 import {
   FileText,
@@ -33,15 +31,13 @@ import {
 } from 'lucide-react';
 
 type DocId = 'rge_anexo_e' | 'rge_anexo_f' | 'rge_diagrama' | 'ceee_diagrama' | 'ceee_unifilar' | 'ceee_memorial' | 'ceee_anexo_i';
-type PrintableDocId = Exclude<DocId, 'ceee_anexo_i' | 'ceee_memorial'>;
-type _Unused = PrintableDocId;
-
 interface DocItem {
   id: DocId;
   title: string;
   desc: string;
   badge: string;
-  tipo: 'pdf' | 'xlsx';
+  /** pdf = gerado (diagramas); docx/xlsx = template oficial preenchido */
+  tipo: 'pdf' | 'xlsx' | 'docx';
   previewPath: string;
 }
 
@@ -69,15 +65,15 @@ export default function Step4_Documentos() {
     {
       id: 'rge_anexo_e',
       title: 'Formulário de Solicitação de Orçamento de Conexão',
-      desc: 'Anexo E — RGE/CPFL · Formulário oficial de solicitação (3 páginas)',
+      desc: 'Anexo E — RGE/CPFL · Documento editável (.docx) preenchido com os dados do projeto',
       badge: 'Anexo E',
-      tipo: 'pdf',
-      previewPath: '/documentos/rge/anexo-e.pdf',
+      tipo: 'docx',
+      previewPath: '/documentos/rge/anexo-e.docx',
     },
     {
       id: 'rge_anexo_f',
       title: 'Lista de Materiais / Ordem de Serviço',
-      desc: 'Anexo F — RGE/CPFL · Planilha editável (.xlsx) — preencha após o download',
+      desc: 'Anexo F — RGE/CPFL · Planilha editável (.xlsx) preenchida com os dados do projeto',
       badge: 'Anexo F',
       tipo: 'xlsx',
       previewPath: '/documentos/rge/anexo-f.xlsx',
@@ -112,25 +108,26 @@ export default function Step4_Documentos() {
     {
       id: 'ceee_memorial',
       title: 'Memorial Descritivo',
-      desc: 'CEEE Equatorial · NT.00020.EQTL — Memorial técnico do sistema',
+      desc: 'CEEE Equatorial · NT.00020.EQTL — Documento editável (.docx) preenchido com os dados do projeto',
       badge: 'Memorial',
-      tipo: 'pdf',
-      previewPath: '/documentos/ceee/memorial-descritivo.pdf',
+      tipo: 'docx',
+      previewPath: '/documentos/ceee/memorial.docx',
     },
     {
       id: 'ceee_anexo_i',
       title: 'Formulário de Solicitação de Orçamento — Grupo B',
-      desc: 'Anexo I — CEEE NT.00020.EQTL · Identificação, UC, dados técnicos e equipamentos',
+      desc: 'Anexo I — CEEE NT.00020.EQTL · Planilha editável (.xlsx) preenchida com os dados do projeto',
       badge: 'Anexo I',
-      tipo: 'pdf',
-      previewPath: '/documentos/ceee/anexo-i.pdf',
+      tipo: 'xlsx',
+      previewPath: '/documentos/ceee/anexo-i.xlsx',
     },
   ];
 
   const activeDocs = distribuidora === 'CEEE' ? docsCEEE : docsRGE;
 
   // ──────────────────────────────────────────────────────────────────
-  // GERAÇÃO DE PDF
+  // GERAÇÃO DE DOCUMENTOS
+  // Diagramas → PDF gerado. Anexos/Memorial → template oficial preenchido.
   // ──────────────────────────────────────────────────────────────────
   const buildPayload = () => ({
     cliente,
@@ -142,30 +139,39 @@ export default function Step4_Documentos() {
     crea,
   });
 
+  // Só os diagramas são gerados como PDF.
   const generatePdf = async (docId: DocId): Promise<Uint8Array> => {
     const p = buildPayload();
     switch (docId) {
-      case 'rge_anexo_e':   return gerarAnexoERGE(p);
-      case 'rge_anexo_f':   return gerarAnexoFRGE(p);
       case 'rge_diagrama':  return gerarDiagramaUnifilarRGE(p);
-      case 'ceee_diagrama':  return gerarDiagramaBlocosCEEE(p);
+      case 'ceee_diagrama': return gerarDiagramaBlocosCEEE(p);
       case 'ceee_unifilar': return gerarDiagramaUnifilarCEEE(p);
-      case 'ceee_memorial': return gerarMemorialCEEE(p);
-      case 'ceee_anexo_i':  return gerarAnexoICEEE(p);
       default: throw new Error('Documento sem gerador PDF');
+    }
+  };
+
+  // Anexos e Memorial: preenche o template editável (.docx/.xlsx).
+  const fillTemplate = async (docId: DocId): Promise<Blob> => {
+    const p = buildPayload();
+    switch (docId) {
+      case 'rge_anexo_e':   return fillAnexoE(p);
+      case 'rge_anexo_f':   return fillAnexoF(p);
+      case 'ceee_memorial': return fillMemorial(p);
+      case 'ceee_anexo_i':  return fillAnexoI(p);
+      default: throw new Error('Documento sem template editável');
     }
   };
 
   const getFilename = (docId: DocId): string => {
     const nc = cliente.nome.replace(/\s+/g, '_').toUpperCase() || 'CLIENTE';
     switch (docId) {
-      case 'rge_anexo_e':   return `Anexo_E_RGE_${nc}.pdf`;
+      case 'rge_anexo_e':   return `Anexo_E_RGE_${nc}.docx`;
       case 'rge_anexo_f':   return `Anexo_F_RGE_${nc}.xlsx`;
       case 'rge_diagrama':  return `Diagrama_Blocos_RGE_${nc}.pdf`;
-      case 'ceee_diagrama':  return `Diagrama_Blocos_CEEE_${nc}.pdf`;
+      case 'ceee_diagrama': return `Diagrama_Blocos_CEEE_${nc}.pdf`;
       case 'ceee_unifilar': return `Diagrama_Unifilar_CEEE_${nc}.pdf`;
-      case 'ceee_memorial': return `Memorial_Descritivo_CEEE_${nc}.pdf`;
-      case 'ceee_anexo_i':  return `Anexo_I_CEEE_${nc}.pdf`;
+      case 'ceee_memorial': return `Memorial_Descritivo_CEEE_${nc}.docx`;
+      case 'ceee_anexo_i':  return `Anexo_I_CEEE_${nc}.xlsx`;
       default:              return 'documento.pdf';
     }
   };
@@ -177,18 +183,12 @@ export default function Step4_Documentos() {
   const handleDownload = async (doc: DocItem) => {
     setLoadingDoc(doc.id);
     try {
-      if (doc.tipo === 'xlsx') {
-        const res = await fetch(doc.previewPath);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = getFilename(doc.id);
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
+      if (doc.tipo === 'pdf') {
         const bytes = await generatePdf(doc.id);
         downloadPdf(bytes, getFilename(doc.id));
+      } else {
+        const blob = await fillTemplate(doc.id);
+        downloadBlob(blob, getFilename(doc.id));
       }
     } catch (e: unknown) {
       console.error('Erro ao baixar documento:', e);
@@ -199,9 +199,10 @@ export default function Step4_Documentos() {
   };
 
   const handlePrint = async (doc: DocItem) => {
-    if (doc.tipo === 'xlsx') {
-      // xlsx: abre diretamente no navegador
-      window.open(doc.previewPath, '_blank');
+    // Só diagramas (PDF) abrem para impressão. Templates editáveis são baixados
+    // preenchidos (Word/Excel não imprimem direto do navegador).
+    if (doc.tipo !== 'pdf') {
+      await handleDownload(doc);
       return;
     }
     setLoadingDoc(doc.id);
