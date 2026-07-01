@@ -56,6 +56,10 @@ export interface ProjetoState {
     inclinacaoTelhado: number;
     areaTelhado: string;
     tipoTelhado: string;
+    /** Imagem de satélite do telhado (data URL) capturada via Maps */
+    telhadoImagem?: string;
+    /** Imagem street view da fachada (data URL) capturada via Maps */
+    fachadaImagem?: string;
   };
   sistemaFV: {
     moduloId: string;

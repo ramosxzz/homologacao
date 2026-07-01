@@ -53,6 +53,8 @@ export interface ProjetoData {
     orientacaoTelhado: number;
     tipoTelhado: string;
     areaTelhado: string;
+    telhadoImagem?: string;
+    fachadaImagem?: string;
   };
   sistemaFV: {
     moduloFabricante: string;

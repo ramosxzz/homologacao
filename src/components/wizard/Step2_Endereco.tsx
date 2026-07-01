@@ -3,8 +3,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjeto } from '@/contexts/ProjetoContext';
 import dynamic from 'next/dynamic';
-import { Navigation, Loader2 } from 'lucide-react';
+import { Navigation, Loader2, Camera, Home, Satellite, RefreshCw } from 'lucide-react';
 import { formatarCEP } from '@/lib/validators';
+import { capturarImagem } from '@/lib/mapCapture';
 
 const GOOGLE_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || '';
 
@@ -49,6 +50,7 @@ export default function Step2_Endereco() {
   const [cepLoading, setCepLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [capturando, setCapturando] = useState<'satellite' | 'streetview' | null>(null);
   const logradouroRef = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
@@ -119,6 +121,19 @@ export default function Step2_Endereco() {
       type: 'UPDATE_LOCALIZACAO',
       payload: { [field]: value }
     });
+  };
+
+  const handleCapturar = async (tipo: 'satellite' | 'streetview') => {
+    setCapturando(tipo);
+    setErrorMsg('');
+    try {
+      const dataUrl = await capturarImagem(tipo, localizacao.latitude, localizacao.longitude);
+      handleLocalizacaoChange(tipo === 'satellite' ? 'telhadoImagem' : 'fachadaImagem', dataUrl);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Falha ao capturar imagem.');
+    } finally {
+      setCapturando(null);
+    }
   };
 
   // Masked CEP change
@@ -391,6 +406,57 @@ export default function Step2_Endereco() {
               className="form-input font-mono bg-slate-800/40 text-slate-400"
               value={localizacao.longitude.toFixed(6)}
             />
+          </div>
+        </div>
+
+        {/* Captura de imagens do imóvel via Maps */}
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Camera size={16} className="text-amber-500" />
+            <span className="form-label mb-0">Imagens do imóvel</span>
+          </div>
+          <p className="wizard-section-description mb-3">
+            Capture a imagem de satélite do telhado e a fachada (street view) na posição atual do pin. As imagens são anexadas ao Anexo F.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {([
+              { tipo: 'satellite' as const, campo: 'telhadoImagem' as const, titulo: 'Telhado (satélite)', Icone: Satellite },
+              { tipo: 'streetview' as const, campo: 'fachadaImagem' as const, titulo: 'Fachada (street view)', Icone: Home },
+            ]).map(({ tipo, campo, titulo, Icone }) => {
+              const img = localizacao[campo];
+              const loading = capturando === tipo;
+              return (
+                <div key={tipo} className="rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden">
+                  <div className="aspect-video bg-slate-800/40 flex items-center justify-center relative">
+                    {img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={img} alt={titulo} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-slate-500">
+                        <Icone size={28} />
+                        <span className="text-xs">Sem imagem capturada</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Icone size={14} className="text-amber-500" /> {titulo}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCapturar(tipo)}
+                      disabled={loading}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors disabled:opacity-50"
+                    >
+                      {loading
+                        ? <Loader2 size={13} className="animate-spin" />
+                        : img ? <RefreshCw size={13} /> : <Camera size={13} />}
+                      {loading ? 'Capturando...' : img ? 'Recapturar' : 'Capturar'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

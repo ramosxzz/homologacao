@@ -97,14 +97,48 @@ export async function fillDocx(
 /** Edições por aba: { 'NomeAba': { 'C5': valor, ... } } */
 export type XlsxEdits = Record<string, Record<string, string | number>>;
 
+/** Imagem a embutir: data URL + aba + âncora (tl/br em coords 0-based). */
+export type XlsxImage = {
+  sheet: string;
+  dataUrl: string;
+  tl: { col: number; row: number };
+  br: { col: number; row: number };
+};
+
+function dataUrlToBuffer(dataUrl: string): { buffer: ArrayBuffer; ext: 'png' | 'jpeg' | 'gif' } {
+  const m = dataUrl.match(/^data:image\/(png|jpe?g|gif);base64,(.+)$/);
+  if (!m) throw new Error('data URL de imagem inválido');
+  const ext = (m[1] === 'jpg' ? 'jpeg' : m[1]) as 'png' | 'jpeg' | 'gif';
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { buffer: bytes.buffer, ext };
+}
+
 /**
  * Preenche um template XLSX gravando células por endereço, preservando
- * fórmulas, estilos, imagens e demais abas.
+ * fórmulas, estilos, imagens e demais abas. Opcionalmente embute imagens.
  */
-export async function fillXlsx(templatePath: string, edits: XlsxEdits): Promise<Blob> {
+export async function fillXlsx(
+  templatePath: string,
+  edits: XlsxEdits,
+  images: XlsxImage[] = [],
+): Promise<Blob> {
   const buf = await fetchTemplate(templatePath);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
+
+  for (const img of images) {
+    const ws = wb.getWorksheet(img.sheet);
+    if (!ws) continue;
+    try {
+      const { buffer, ext } = dataUrlToBuffer(img.dataUrl);
+      const id = wb.addImage({ buffer, extension: ext });
+      ws.addImage(id, { tl: img.tl, br: img.br, editAs: 'oneCell' } as unknown as Parameters<typeof ws.addImage>[1]);
+    } catch {
+      // imagem inválida — ignora, mantém template
+    }
+  }
 
   // Força recálculo ao abrir: abas oficiais puxam do "Input" via fórmula e o
   // ExcelJS mantém o resultado cacheado. Sem isto, o Excel/LibreOffice mostra

@@ -5,7 +5,7 @@
  * como no template original para preenchimento manual pelo responsável técnico.
  */
 import type { ProjetoData } from './pdfGenerator';
-import { fillDocx, fillXlsx, type XlsxEdits } from './docFiller';
+import { fillDocx, fillXlsx, type XlsxEdits, type XlsxImage } from './docFiller';
 
 function hoje(): string {
   return new Date().toLocaleDateString('pt-BR');
@@ -117,7 +117,17 @@ export function fillAnexoF(d: ProjetoData): Promise<Blob> {
       F26: d.unidadeConsumidora.cargaInstalada,
     },
   };
-  return fillXlsx('/documentos/rge/anexo-f.xlsx', edits);
+  // Fotos capturadas via Maps (aba Input): Fachada (street view) e Telhado (satélite)
+  const imgs: XlsxImage[] = [];
+  if (d.localizacao.fachadaImagem) {
+    imgs.push({ sheet: 'Input', dataUrl: d.localizacao.fachadaImagem,
+      tl: { col: 3, row: 24.5 }, br: { col: 11, row: 32 } });
+  }
+  if (d.localizacao.telhadoImagem) {
+    imgs.push({ sheet: 'Input', dataUrl: d.localizacao.telhadoImagem,
+      tl: { col: 12, row: 24.5 }, br: { col: 18, row: 32 } });
+  }
+  return fillXlsx('/documentos/rge/anexo-f.xlsx', edits, imgs);
 }
 
 // ─── ANEXO I — CEEE (xlsx, abas "1" e "0") ────────────────────────────────────
